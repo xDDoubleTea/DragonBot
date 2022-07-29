@@ -1,0 +1,39 @@
+{
+    "date_data": [
+        {
+            "date": 1,
+            "start_time": "13:00",
+            "end_time": "01:00"
+        },
+        {
+            "date": 2,
+            "start_time": "13:00",
+            "end_time": "01:00"
+        },
+        {
+            "date": 3,
+            "start_time": "13:00",
+            "end_time": "01:00"
+        },
+        {
+            "date": 4,
+            "start_time": "13:00",
+            "end_time": "01:00"
+        },
+        {
+            "date": 5,
+            "start_time": "13:00",
+            "end_time": "01:00"
+        },
+        {
+            "date": 6,
+            "start_time": "13:00",
+            "end_time": "01:00"
+        },
+        {
+            "date": 7,
+            "start_time": "13:00",
+            "end_time": "01:00"
+        }
+    ]
+}
