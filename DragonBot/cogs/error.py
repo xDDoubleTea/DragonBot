@@ -5,7 +5,7 @@ from pytube.__main__ import YouTube
 import random
 
 
-Me = 398444155132575756
+Me = 1
 
 class error(commands.Cog):
     def __init__(self, client):
