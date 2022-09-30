@@ -360,7 +360,7 @@ class channel(commands.Cog):
             else:
                 mentioned = False
                 for mentions in message.raw_mentions:
-                    if mentions == 403844178687033345 or mentions == self.client.user.id:
+                    if mentions == 403844178687033345 or mentions == self.client.user.id or (not self.client.get_user(mentions).bot):
                         mentioned = True
                         break
 
