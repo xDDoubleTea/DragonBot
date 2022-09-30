@@ -127,9 +127,16 @@ class OpenButtons(View):
         return await self.open_text_channel(interaction = interaction, button = button)
 
 class CloseToggle(View):
-    def __init__(self, main:OpenButtons):
-        super().__init__(timeout=None)
-        self.main = main
+    def __init__(self, main:OpenButtons, attached_msg:Message, time:int = 86400):
+        super().__init__(timeout=time)
+        self.time:int = time
+        self.main:OpenButtons = main
+        self.attached_msg:Message = attached_msg
+
+    async def on_timeout(self):
+        await self.attached_msg.edit(view = None)
+        return await self.attached_msg.reply(mention_user = False, content = f'已達預設關閉頻道時間{self.time}!若需要延長關閉請按取消!', view = CloseButtons(main = self.main))
+
 
     @button(label = '關閉頻道', style = discord.ButtonStyle.blurple)
     async def callback(self, interaction: Interaction, button:Button):
@@ -180,7 +187,8 @@ class CloseButtons(View):
     async def cancel_callback(self, interaction:Interaction, button:Button):
         await interaction.message.edit(view = None)
         await interaction.response.send_message('已取消關閉!')
-        return await interaction.message.edit(view = CloseToggle(main = self.main))
+        msg = await interaction.original_message()
+        return await interaction.message.edit(view = CloseToggle(main = self.main, attached_msg = msg))
 
 class afterClose(View):
     def __init__(self, main:OpenButtons):
@@ -424,6 +432,10 @@ class channel(commands.Cog):
     @commands.command(name = 'remove_customer', aliases = ['rm_cus'])
     async def remove_customer(self, ctx, id):
         return await self.customer_management(channel = ctx.channel, args = id, add_or_remove = False)
+
+    @commands.command(name = 'set_channel_close_time')
+    async def set_channel_close_time(self, ctx:Context, time:int):
+        return 
     
 async def setup(client):
     await client.add_cog(channel(client = client, main = OpenButtons(client = client)))
