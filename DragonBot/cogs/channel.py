@@ -1,5 +1,5 @@
 import discord
-from discord import Interaction
+from discord import Interaction, Message, TextChannel
 from discord.ext import commands
 from discord.ui import View, button, select, Button
 import emoji
@@ -10,7 +10,8 @@ import json
 from config.bot_info import *
 from config.feedback import *
 from config.Mysql_info import *
-from typing import List
+from discord.ext.commands import Context
+from datetime import datetime, timedelta
 
 class OpenButtons(View):
     class btnInfo:
@@ -19,7 +20,7 @@ class OpenButtons(View):
     def __init__(self, client:discord.Client):
         super().__init__(timeout = None)
         self.client = client
-        #從資料庫取出channel_info並轉為可用的形式 -> [(List[discord.User],discord.TextChannel)]
+        #從資料庫取出channel_info並轉為可用的形式 -> List[Tuple[List[discord.User],discord.TextChannel]]
         sql_cmd = 'SELECT * FROM customers'
         raw_data = MySqlDataBase.get_db_data(self = MySqlDataBase(),sql_cmd = sql_cmd)
         channel_count = 0
@@ -116,14 +117,14 @@ class OpenButtons(View):
         return await self.open_text_channel(interaction = interaction, button = button)
 
     @button(label = '群組問題', style = discord.ButtonStyle.blurple, custom_id = '群組')
-    async def guild_callback(self, interaction, button:Button):
+    async def guild_callback(self, interaction:Interaction, button:Button):
         if button.emoji == None:
             button.emoji = await interaction.guild.fetch_emoji(discord_emoji)
         await interaction.message.edit(view = self)
         return await self.open_text_channel(interaction = interaction, button = button)
 
     @button(label = '其他問題', style = discord.ButtonStyle.blurple, custom_id = '其他', emoji = '📩')
-    async def others_callback(self, interaction, button:Button):
+    async def others_callback(self, interaction:Interaction, button:Button):
         return await self.open_text_channel(interaction = interaction, button = button)
 
 class CloseToggle(View):
@@ -136,7 +137,6 @@ class CloseToggle(View):
     async def on_timeout(self):
         await self.attached_msg.edit(view = None)
         return await self.attached_msg.reply(mention_user = False, content = f'已達預設關閉頻道時間{self.time}!若需要延長關閉請按取消!', view = CloseButtons(main = self.main))
-
 
     @button(label = '關閉頻道', style = discord.ButtonStyle.blurple)
     async def callback(self, interaction: Interaction, button:Button):
@@ -151,44 +151,70 @@ class CloseButtons(View):
         super().__init__(timeout = None)
         self.main = main
 
-    async def close_channel(self, interaction:discord.Interaction):
+    async def close_channel(self, channel:discord.TextChannel, message:discord.Message, client:discord.Client, user:discord.User):
         #set customers permissions so they no longer can see the channel
-        await interaction.message.edit(view = None)
-        cus = []
-        for info in self.main.channel_info:
-            if info[1] == interaction.channel:
-                for customers in info[0]:
-                    try:
-                        perms = interaction.channel.overwrites_for(customers)
-                        perms.read_messages = False
-                        await interaction.channel.set_permissions(customers, overwrite = perms)
-                    except:
-                        pass
-                cus = info[0]
-        #send message with 'delete channel', 'save channel', 'reopen channel' buttons
-        #send user with feed back stuff
+        async with channel.typing():
+            await message.edit(view = None)
+            cus = []
+            customers_mention = ""
+            for info in self.main.channel_info:
+                if info[1] == channel:
+                    for customers in info[0]:
+                        customers_mention += f'{customers.mention} '
+                        try:
+                            perms = channel.overwrites_for(customers)
+                            perms.read_messages = False
+                            await channel.set_permissions(customers, overwrite = perms)
+                        except:
+                            pass
+                    cus = info[0]
+            #send message with 'delete channel', 'save channel', 'reopen channel' buttons
+            #send user with feed back stuff
+            msg = await channel.send('頻道紀錄檔案生成中...')
+            #==================頻道紀錄==================
+            dragon = client.get_channel(1015983550782263356)            
+            transcript = await chat_exporter.export(channel)
+            transcript_file = discord.File(
+                io.BytesIO(transcript.encode()),
+                filename=f"{channel.name}.html"
+                )
+            UTC_to_GMT = timedelta(hours = 8)
+            new = channel.created_at + UTC_to_GMT
+            created_time_str = new.strftime('%Y/%m/%d %H:%M:%S')
+            closed_time_str = datetime.now().strftime('%Y/%m/%d %H:%M:%S')
+            embed = discord.Embed(
+                title = f'頻道 「{channel.name}」紀錄',
+                description = f'此頻道開啟於{created_time_str}\n顧客數量{len(cus)}\n關閉於{closed_time_str}',
+                color = theme_color
+            )
+            embed.add_field(name = '顧客：', value = customers_mention)
+            #==================頻道紀錄==================
+            new = await dragon.send(embed = embed)
+            await new.edit(attachments=[transcript_file])
+            msg = await msg.edit(content='生成完成✅傳送回饋單給客戶中...')
 
-        await interaction.response.send_message(
-            content = f'頻道已被{interaction.user}關閉!接下來你想要?', 
-            view = afterClose(main = self.main)
-        )
-        return await feedbackEmbed(
-            channel = interaction.channel,
-            client = interaction.client,
-            customers = cus,
-            view = FeedBackSystem()
-        )
+            await feedbackEmbed(
+                channel = channel,
+                client = client,
+                customers = cus,
+                view = FeedBackSystem()
+            )
+            await msg.edit(content='傳送完成✅')
+            
+            return await channel.send(
+                content = f'頻道已被 {user.display_name} 關閉!接下來你想要?', 
+                view = afterClose(main = self.main)
+            )
     
     @button(label = '關閉頻道', style = discord.ButtonStyle.danger)
     async def close_callback(self, interaction: Interaction, button:Button):
-        return await self.close_channel(interaction = interaction)
+        return await self.close_channel(message= interaction.message, channel = interaction.channel , user = interaction.user, client = interaction.client)
 
     @button(label = '取消', style = discord.ButtonStyle.gray)
     async def cancel_callback(self, interaction:Interaction, button:Button):
         await interaction.message.edit(view = None)
         await interaction.response.send_message('已取消關閉!')
-        msg = await interaction.original_message()
-        return await interaction.message.edit(view = CloseToggle(main = self.main, attached_msg = msg))
+        return await interaction.message.edit(view = CloseToggle(main = self.main))
 
 class afterClose(View):
     def __init__(self, main:OpenButtons):
@@ -258,7 +284,7 @@ class FeedBackSystem(View):
         msg = await interaction.user.send(f'評分 {star_emoji} 已傳送!感謝您的惠顧!')
         await msg.add_reaction('✅')
         
-        await interaction.user.send('若您有興趣的話，請選擇想與今天服務人員說的話', view = words_selction())
+        await interaction.user.send('若您有興趣的話，請選擇想與今天服務人員說的話，或點擊按鈕輸入(擇1)。', view = words_selction())
         return await feed_back_channel.send(embed = embed)
 
 
@@ -288,7 +314,7 @@ class words_selction(View):
         super().__init__(timeout = 86400)
 
     @select(            
-        placeholder='請選擇評語',
+        placeholder='選擇評語',
         options=words_options,
         custom_id = 'review',
         min_values=1,
@@ -298,12 +324,17 @@ class words_selction(View):
         return await review_words_embed(
             interaction = interaction,
             select = select
-        )    
+        )
+    
+    @button(label = '輸入評語', style = discord.ButtonStyle.blurple, emoji = '⌨')
+    async def btn_callback(self , interaction:Interaction, button:Button):
+        return await interaction.response.send_modal(Feed_back_modal())
+    
 
 class channel(commands.Cog):
     def __init__(self, client, main:OpenButtons):
         self.main = main
-        self.client = client
+        self.client:discord.Client = client
 
     async def if_in_channel(self, channel:discord.TextChannel):
         sql_cmd = 'SELECT * FROM customers'
@@ -355,7 +386,7 @@ class channel(commands.Cog):
             return await msg.add_reaction('❗')
 
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message:Message):
         if message.author == self.client.user:
             return
         else:
@@ -384,7 +415,7 @@ class channel(commands.Cog):
                     await get_embed.help_embed(self = self, message = message, cmd = '0')
     
     @commands.Cog.listener()
-    async def on_message_edit(self, before, after):
+    async def on_message_edit(self, before:Message, after:Message):
         if await self.if_in_channel(channel = before.channel):
             if len(after.raw_mentions) != 0:
                 mentioned = False
@@ -397,11 +428,13 @@ class channel(commands.Cog):
                     await after.channel.send('你好！我們已收到你的訊息，感謝你與我們聯繫。待上線後將會回答您的問題~')
 
     @commands.command(name = 'purchase', aliases = ['New', 'new'])
-    async def purchase(self, ctx):
+    @commands.has_permissions(administrator = True)
+    async def purchase(self, ctx:Context):
+        await ctx.message.delete()
         return await ctx.send(view = OpenButtons(client=self.client), content = the_msg(role = ctx.guild.get_role(cus_service_role_id), cmd_channel = self.client.get_channel(cmd_channel_id)), embed = get_embed.get_purchase_embed(self))
 
     @commands.command(name = 'close')
-    async def close(self, ctx):
+    async def close(self, ctx:Context):
         if await self.if_in_channel(channel = ctx.channel):
             return await ctx.send(
                 content = '新的關閉頻道按鈕:',
@@ -412,7 +445,7 @@ class channel(commands.Cog):
             return await msg.add_reaction('❗')
 
     @commands.command(name='save_channel', aliases =['save_cnl'])
-    async def save_channel(self, ctx):
+    async def save_channel(self, ctx:Context):
         if await self.if_in_channel(channel  = ctx.channel):
             channel = ctx.message.channel
             transcript = await chat_exporter.export(channel)
@@ -426,11 +459,11 @@ class channel(commands.Cog):
             return await msg.add_reaction('❗')
 
     @commands.command(name = 'add_customer', aliases = ['add_cus'])
-    async def add_customer(self, ctx, id):
+    async def add_customer(self, ctx:Context, id):
         return await self.customer_management(channel = ctx.channel, args = id, add_or_remove = True)
     
     @commands.command(name = 'remove_customer', aliases = ['rm_cus'])
-    async def remove_customer(self, ctx, id):
+    async def remove_customer(self, ctx:Context, id):
         return await self.customer_management(channel = ctx.channel, args = id, add_or_remove = False)
 
     @commands.command(name = 'set_channel_close_time')
