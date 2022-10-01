@@ -20,7 +20,8 @@ class OpenButtons(View):
     def __init__(self, client:discord.Client):
         super().__init__(timeout = None)
         self.client = client
-        #從資料庫取出channel_info並轉為可用的形式 -> List[Tuple[List[discord.User],discord.TextChannel]]
+        #資料庫data形式：(customer_id, channel_id, timeout_time (sec), timed-out(0 or 1), message_id)
+        #從資料庫取出channel_info並轉為可用的形式 -> List[ Tuple[ List[discord.User], discord.TextChannel, timeout time, timed-out, btn_message_id] ]
         sql_cmd = 'SELECT * FROM customers'
         raw_data = MySqlDataBase.get_db_data(self = MySqlDataBase(),sql_cmd = sql_cmd)
         channel_count = 0
@@ -36,7 +37,7 @@ class OpenButtons(View):
                     pass
         channel_info_list = []
         for channel in all_channel:
-            new_tuple = ([],self.client.get_channel(int(channel)))
+            new_tuple = ([],self.client.get_channel(int(channel[0])), int(channel[1]), bool(int(channel[2])), int(channel[3]))
             for customer in raw_data:
                 if customer[1] == channel:
                     new_tuple[0].append(self.client.get_user(int(customer[0])))
@@ -47,7 +48,6 @@ class OpenButtons(View):
         with open('channel_name.json', 'r') as file:
             name = json.load(file)
         self.channel_name:str = name['channel_name']
-        
         
 
     def set_new_channel_name(self):
@@ -88,21 +88,21 @@ class OpenButtons(View):
         await new_channel.set_permissions(cus_service_role ,overwrite = perms)
 
         #set next channel name
-        self.set_new_channel_name()
-        customers = []
-        customers.append(interaction.user)
-        self.channel_info.append((customers, new_channel))
-
-        for cus in customers:
-            sql_cmd = 'INSERT INTO customers (customer_id, channel_id) VALUES (%s, %s)'
-            val = (str(cus.id), str(new_channel.id))
-            MySqlDataBase.insert_data(self = MySqlDataBase(), sql_cmd = sql_cmd, values = val)
-
-        await new_channel.send(
+        msg = await new_channel.send(
             content = open_cnl_msg(interaction = interaction, cus_service_role = cus_service_role)[0], 
             view = CloseToggle(main = self),
             embed = open_cnl_msg(interaction = interaction, cus_service_role = cus_service_role)[1]
         )
+        self.set_new_channel_name()
+        customers = []
+        customers.append(interaction.user)
+        self.channel_info.append((customers, new_channel, 86400, False, msg.id))
+        
+        for cus in customers:
+            sql_cmd = 'INSERT INTO customers (customer_id, channel_id, timeout, timedout, message_id) VALUES (%s, %s, %s, %s, %s)'
+            val = (str(cus.id), str(new_channel.id), '86400', '0', str(msg.id))
+            MySqlDataBase.insert_data(self = MySqlDataBase(), sql_cmd = sql_cmd, values = val)
+
         return await interaction.response.send_message(
             content=f'建立了一個新頻道!{new_channel.mention}', 
             ephemeral = True
@@ -133,10 +133,23 @@ class CloseToggle(View):
         self.time:int = time
         self.main:OpenButtons = main
         self.attached_msg:Message = attached_msg
+        #output channel id, time-outtime, timed-out
+
 
     async def on_timeout(self):
         await self.attached_msg.edit(view = None)
-        return await self.attached_msg.reply(mention_user = False, content = f'已達預設關閉頻道時間{self.time}!若需要延長關閉請按取消!', view = CloseButtons(main = self.main))
+        info = self.main.channel_info
+        idx = 0
+        for x,i in enumerate(info):
+            if self.attached_msg.id == i[4]:
+                idx = x
+                break
+
+        #set timed out = True
+        info[idx][3] = True
+        #set message_id = None
+        info[idx][4] = None
+        return await self.attached_msg.reply(mention_user = False, content = f'已達預設關閉頻道時間{self.time}！若需要延長關閉請按取消！', view = CloseButtons(main = self.main))
 
     @button(label = '關閉頻道', style = discord.ButtonStyle.blurple)
     async def callback(self, interaction: Interaction, button:Button):
@@ -346,6 +359,18 @@ class channel(commands.Cog):
 
         return in_channel
 
+    async def find_message(self, channel:TextChannel):
+        info = self.main.channel_info
+        idx = 0
+        for i,t in enumerate(info):
+            if t[2] == channel:
+                idx = i
+                break
+        
+        now_channel_info = info[idx]
+        if not now_channel_info[3]:
+            msg = await channel.fetch_message(now_channel_info[4])
+        return msg
 
     async def customer_management(self, channel:discord.TextChannel, args, add_or_remove:bool):
         #add_or_remove: True for add, False for remove
@@ -436,10 +461,8 @@ class channel(commands.Cog):
     @commands.command(name = 'close')
     async def close(self, ctx:Context):
         if await self.if_in_channel(channel = ctx.channel):
-            return await ctx.send(
-                content = '新的關閉頻道按鈕:',
-                view = CloseToggle(main = OpenButtons(client = self.client))
-            )
+            msg = await ctx.send('新的關閉頻道按鈕:')
+            return await msg.edit(view = CloseToggle(main = self.main, attached_msg = msg))
         else:
             msg = await ctx.send(content = '這裡不是客服頻道!')
             return await msg.add_reaction('❗')
@@ -466,9 +489,15 @@ class channel(commands.Cog):
     async def remove_customer(self, ctx:Context, id):
         return await self.customer_management(channel = ctx.channel, args = id, add_or_remove = False)
 
-    @commands.command(name = 'set_channel_close_time')
+    @commands.command(name = 'set_channel_close_time', aliases = ['set_cnl_close'])
     async def set_channel_close_time(self, ctx:Context, time:int):
-        return 
+        if await self.if_in_channel(channel = ctx.channel):
+            msg = await self.find_message(channel = ctx.channel)
+            newview = CloseToggle(main = self.main, attached_msg = msg,time = time)
+            return await msg.edit(view = newview)
+        else:
+            msg = await ctx.send(content = '這裡不是客服頻道!')
+            return await msg.add_reaction('❗')
     
 async def setup(client):
     await client.add_cog(channel(client = client, main = OpenButtons(client = client)))
