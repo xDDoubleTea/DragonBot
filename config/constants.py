@@ -6,29 +6,43 @@ load_dotenv()
 app_mode = os.getenv("APP_MODE")
 assert app_mode in ["test", "prod"], "APP_MODE must be either 'test' or 'prod'"
 app_mode = app_mode.lower()
-if app_mode == "test":
-    bot_token = os.getenv("BOT_TOKEN_TEST")
-else:
-    bot_token = os.getenv("BOT_TOKEN_PROD")
-pre = "$"
+pre = os.getenv("PREFIX_TEST") if app_mode == "test" else os.getenv("PREFIX_PROD")
+db_file = os.getenv("DB_FILE_PROD") if app_mode == "prod" else os.getenv("DB_FILE_TEST")
+bot_token = (
+    os.getenv("BOT_TOKEN_PROD") if app_mode == "prod" else os.getenv("BOT_TOKEN_TEST")
+)
 
 
 num_to_chinese = ["一", "二", "三", "四", "五", "六", "日"]
 My_user_id = 398444155132575756
-version = 3.0
+version = 4.0
 MyDiscordID = "hoshiyomi6942"
 default_footer = f"Developed by {MyDiscordID} version:{version}"
 
-cmd_channel_id = 461556173011943435
+cmd_channel_id = 461556173011943435 if app_mode == "prod" else 1073168107813740556
+# In production guild, cmd_channel_id is 461556173011943435
+# In test guild, cmd_channel_id is 1073168107813740556
 
-cus_service_role_id = 856792148060667934
+cus_service_role_id = 856792148060667934 if app_mode == "prod" else 1388896580173828188
+# In production guild, cus_service_role_id is 856792148060667934
+# In test guild, cus_service_role_id is 1388896580173828188
 
 THEME_COLOR = Color.from_rgb(190, 119, 255)
 
-logchannel = 977445485180751882
-app_id = 973570456076558406
+logchannel = 977445485180751882 if app_mode == "prod" else 1388896453446991902
+# In production guild, logchannel is 977445485180751882
+# In test guild, logchannel is 1388896453446991902
 
-MY_GUILD = Object(id=403844884374487040)
+
+app_id = 973570456076558406 if app_mode == "prod" else 865240620233785344
+# In production guild, app_id is 973570456076558406
+# In test guild, app_id is 865240620233785344
+
+MY_GUILD = (
+    Object(id=884953858118393897)
+    if app_mode == "test"
+    else Object(id=403844884374487040)
+)
 # guild dragon 403844884374487040
 # test guild 884953858118393897
 

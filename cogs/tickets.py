@@ -1,4 +1,3 @@
-import discord
 from discord.ext import commands
 from discord.ext.commands import Context, Cog
 
@@ -16,3 +15,7 @@ class tickets(Cog):
     async def close_ticket(self, ctx: Context):
         """Close the current ticket."""
         await ctx.send("Ticket closing is not implemented yet.")
+
+
+async def setup(client):
+    await client.add_cog(tickets(client))

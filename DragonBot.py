@@ -1,15 +1,17 @@
 import os
 import discord
 from discord.ext import commands
-from config import pre, app_id, bot_token, My_user_id
+from config import pre, app_id, bot_token, My_user_id, version, app_mode
 
 
 class DragonBot(commands.Bot):
     def __init__(self):
+        assert pre is not None, "Prefix must be defined in the config"
         super().__init__(
             command_prefix=pre,
             intents=discord.Intents.all(),
             help_command=None,
+            description=f"Dragon Bot version {version}\n Mode {app_mode}",
             application_id=app_id,
         )
 

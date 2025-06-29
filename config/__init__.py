@@ -16,4 +16,5 @@ from .constants import (
     DS01,
     DISCORD_EMOJI,
     ticket_system_main_message,
+    app_mode,
 )
