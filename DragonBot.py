@@ -34,7 +34,7 @@ class DragonBot(commands.Bot):
 
     async def setup_hook(self):
         for cog in filter(
-            lambda file: os.path.isfile(file) and file.endswith(".py"),
+            lambda file: file.endswith(".py"),
             os.listdir("./cogs"),
         ):
             await self.load_extension(f"cogs.{cog[:-3]}")
