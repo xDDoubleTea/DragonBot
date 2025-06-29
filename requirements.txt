@@ -1,0 +1,8 @@
+discord.py
+pytz
+numpy
+requests
+bs4
+python-dotenv
+pytest
+pytest-asyncio

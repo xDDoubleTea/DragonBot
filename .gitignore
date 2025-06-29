@@ -1,0 +1,8 @@
+*/__pycache__/
+temp.txt
+test.py
+.venv
+.env
+Game
+*.db
+DiscordChatExporter.Cli/
