@@ -10,8 +10,6 @@ if app_mode == "test":
     bot_token = os.getenv("BOT_TOKEN_TEST")
 else:
     bot_token = os.getenv("BOT_TOKEN_PROD")
-assert bot_token
-bot_token = int(bot_token)
 pre = "$"
 
 

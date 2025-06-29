@@ -39,4 +39,5 @@ class DragonBot(commands.Bot):
 
 
 client = DragonBot()
+assert bot_token is not None
 client.run(bot_token)
