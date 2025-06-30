@@ -2,12 +2,44 @@ from discord import Role, TextChannel, Color, Object
 from dotenv import load_dotenv
 import os
 
+__all__ = [
+    "bot_token",
+    "pre",
+    "num_to_chinese",
+    "My_user_id",
+    "version",
+    "MyDiscordID",
+    "default_footer",
+    "cmd_channel_id",
+    "cus_service_role_id",
+    "THEME_COLOR",
+    "logchannel",
+    "app_id",
+    "MY_GUILD",
+    "NOT_REQUESTABLE_ROLES_ID",
+    "DS01",
+    "DISCORD_EMOJI",
+    "ticket_system_main_message",
+    "app_mode",
+    "online_db",
+    "db_file",
+    "db_url",
+    "all_cmds",
+    "channel_cmds",
+    "key_cmds",
+    "money_cmds",
+    "online_cmds",
+    "monitor_cmds",
+    "game_cmds",
+]
 load_dotenv()
 app_mode = os.getenv("APP_MODE")
 assert app_mode in ["test", "prod"], "APP_MODE must be either 'test' or 'prod'"
 app_mode = app_mode.lower()
 online_db = os.getenv("ONLINE_DB", "0")
 online_db = int(online_db)
+db_file = ""
+db_url = ""
 if not online_db:
     db_file = (
         os.getenv("DB_FILE_PROD") if app_mode == "prod" else os.getenv("DB_FILE_TEST")

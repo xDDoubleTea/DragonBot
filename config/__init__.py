@@ -1,20 +1,2 @@
-from .constants import (
-    bot_token,
-    pre,
-    num_to_chinese,
-    My_user_id,
-    version,
-    MyDiscordID,
-    default_footer,
-    cmd_channel_id,
-    cus_service_role_id,
-    THEME_COLOR,
-    logchannel,
-    app_id,
-    MY_GUILD,
-    NOT_REQUESTABLE_ROLES_ID,
-    DS01,
-    DISCORD_EMOJI,
-    ticket_system_main_message,
-    app_mode,
-)
+from .models import *
+from .constants import *
