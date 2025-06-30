@@ -6,8 +6,19 @@ load_dotenv()
 app_mode = os.getenv("APP_MODE")
 assert app_mode in ["test", "prod"], "APP_MODE must be either 'test' or 'prod'"
 app_mode = app_mode.lower()
-pre = os.getenv("PREFIX_TEST") if app_mode == "test" else os.getenv("PREFIX_PROD")
-db_file = os.getenv("DB_FILE_PROD") if app_mode == "prod" else os.getenv("DB_FILE_TEST")
+online_db = os.getenv("ONLINE_DB", "0")
+online_db = int(online_db)
+if not online_db:
+    db_file = (
+        os.getenv("DB_FILE_PROD") if app_mode == "prod" else os.getenv("DB_FILE_TEST")
+    )
+else:
+    db_url = (
+        os.getenv("DATABASE_PROD_URL")
+        if app_mode == "prod"
+        else os.getenv("DATABASE_TEST_URL")
+    )
+pre = os.getenv("PREFIX_PROD") if app_mode == "prod" else os.getenv("PREFIX_TEST")
 bot_token = (
     os.getenv("BOT_TOKEN_PROD") if app_mode == "prod" else os.getenv("BOT_TOKEN_TEST")
 )
