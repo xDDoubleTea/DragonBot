@@ -5,4 +5,5 @@ test.py
 .env
 Game
 *.db
-DiscordChatExporter.Cli/
+DiscordChatExporter.Cli.linux-x64.zip
+DiscordChatExporterCLI
