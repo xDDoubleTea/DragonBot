@@ -26,7 +26,9 @@ def add_std_footer(embed: Embed, client: Client):
     today = date.today()
     today_date = today.strftime("%Y/%m/%d")
     current_time = time.strftime("%H:%M:%S", t)
-    embed.set_author(name=f"{client}", icon_url=client.user.avatar.url)
+    embed.set_author(
+        name=f"{client.user.display_name}", icon_url=client.user.avatar.url
+    )
     embed.set_footer(
         text=f"{default_footer} \n Sent at {today_date} , {current_time}",
         icon_url=dev.avatar.url,

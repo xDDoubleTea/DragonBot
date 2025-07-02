@@ -1,7 +1,6 @@
 from discord import Interaction, TextChannel
-from discord.app_commands.transformers import NoneType
 from discord.ext import commands
-from discord.ext.commands import Context, Cog
+from discord.ext.commands import Cog
 from discord.ext.commands.hybrid import app_commands
 from config.constants import (
     ticket_system_main_message,
@@ -10,7 +9,7 @@ from config.constants import (
 )
 from core.ticket_manager import TicketManager
 from utils.embed_utils import create_themed_embed
-from view.ticket_views import TicketCreationView
+from view.ticket_views import TicketCloseToggleView, TicketCreationView
 
 
 class tickets(Cog):
@@ -20,17 +19,52 @@ class tickets(Cog):
 
     @app_commands.command(
         name="close_ticket",
-        description="Generate a button and a message to close a ticket",
+        description="將生成一個新的關閉頻道訊息，只能在客服頻道中且只能被客服人員使用。",
     )
+    @app_commands.checks.has_role(cus_service_role_id)
     async def close_ticket(self, interaction: Interaction):
-        await interaction.response.send_message(
-            "Click the button below to close this ticket.",
-        )
+        try:
+            assert interaction.channel and isinstance(interaction.channel, TextChannel)
+            assert self.ticket_manager.is_ticket_channel(
+                channel_id=interaction.channel.id
+            )
+            # First send the message
+            await interaction.response.send_message(
+                "新的關閉頻道按鈕",
+                view=TicketCloseToggleView(self.ticket_manager),
+            )
+            # Delete the old close message, if any
+            old_close_msg_id = await self.ticket_manager.get_close_msg_id(
+                interaction.channel.id
+            )
+            if old_close_msg_id:
+                msg = interaction.channel.get_partial_message(old_close_msg_id)
+                assert msg
+                await msg.edit(view=None)
+            # Set the new close message id to the response message
+            msg = await interaction.original_response()
+            assert msg
+            return await self.ticket_manager.set_close_msg_id(
+                interaction.channel.id, msg.id
+            )
+
+        except AssertionError:
+            await interaction.response.send_message(
+                "這裡不是客服頻道！", ephemeral=True
+            )
+
+    @close_ticket.error
+    async def close_ticket_err(
+        self, interaction: Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, app_commands.MissingRole):
+            return interaction.response.send_message("你不是客服人員！", ephemeral=True)
 
     @app_commands.command(
         name="open_ticket",
-        description="Generate a button and a message to open a ticket",
+        description="將生成一個新的開啟客服頻道之訊息。需要管理員權限才可使用。",
     )
+    @app_commands.default_permissions()
     async def open_ticket(self, interaction: Interaction):
         if interaction.guild is None:
             return await interaction.response.send_message(

@@ -5,7 +5,7 @@ import os
 __all__ = [
     "bot_token",
     "pre",
-    "num_to_chinese",
+    "eng_to_chinese",
     "My_user_id",
     "version",
     "MyDiscordID",
@@ -45,7 +45,15 @@ bot_token = (
 )
 
 
-num_to_chinese = ["一", "二", "三", "四", "五", "六", "日"]
+eng_to_chinese = {
+    "Monday": "一",
+    "Tuesday": "二",
+    "Wednesday": "三",
+    "Thursday": "四",
+    "Friday": "五",
+    "Saturday": "六",
+    "Sunday": "日",
+}
 My_user_id = 398444155132575756
 version = 4.0
 MyDiscordID = "hoshiyomi6942"

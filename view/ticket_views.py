@@ -1,5 +1,5 @@
 import discord
-from discord import Interaction
+from discord import Interaction, TextChannel
 from discord.ui import View, button, Button
 
 from core.ticket_manager import TicketManager
@@ -17,7 +17,10 @@ class TicketCreationView(View):
         try:
             assert interaction.guild
             new_channel = await self.ticket_manager.create_channel(
-                user=interaction.user, guild=interaction.guild, ticket_type=ticket_type
+                user=interaction.user,
+                guild=interaction.guild,
+                ticket_type=ticket_type,
+                close_view=TicketCloseToggleView(self.ticket_manager),
             )
             if not new_channel:
                 raise ChannelCreationFail("Failed creating channel.")
@@ -67,26 +70,55 @@ class TicketCreationView(View):
 
 class TicketCloseToggleView(View):
     def __init__(self, ticket_manager: TicketManager):
-        self.ticket_manager = ticket_manager
         super().__init__(timeout=None)
+        self.ticket_manager = ticket_manager
 
     @button(label="關閉頻道", style=discord.ButtonStyle.blurple)
     async def close_callback(self, interaction: Interaction, button: Button):
-        assert interaction.message
+        assert (
+            interaction.message
+            and interaction.channel
+            and isinstance(interaction.channel, TextChannel)
+        )
         await interaction.message.edit(view=None)
-        try:
-            msg = await self.get_open_msg(channel=interaction.channel)
-            if msg.components != None:
-                await msg.edit(view=None)
-        except:
-            pass
+        msg = interaction.message
+        if msg.components is not None:
+            await msg.edit(view=None)
 
         await interaction.response.send_message(
-            content="你確定你想要關閉此頻道?", view=CloseButtons(main=self.main)
+            content="你確定你想要關閉此頻道?",
+            view=TicketCloseView(ticket_manager=self.ticket_manager),
         )
 
 
 class TicketCloseView(View):
     def __init__(self, ticket_manager: TicketManager):
-        self.ticket_manager = ticket_manager
         super().__init__(timeout=None)
+        self.ticket_manager = ticket_manager
+
+    @button(label="關閉頻道", style=discord.ButtonStyle.red)
+    async def close_callback(self, interaction: Interaction, button: Button):
+        assert (
+            interaction.message
+            and interaction.channel
+            and isinstance(interaction.channel, TextChannel)
+        )
+        await interaction.message.edit(view=None)
+        msg = interaction.message
+        if msg.components is not None:
+            await msg.edit(view=None)
+        # Actually close the channel
+        await self.ticket_manager.close_channel(channel=interaction.channel)
+        await interaction.response.send_message(content="頻道已關閉。接下來你想要？")
+
+    @button(label="取消", style=discord.ButtonStyle.gray)
+    async def cancel_callback(self, interaction: Interaction, button: Button):
+        assert (
+            interaction.message
+            and interaction.channel
+            and isinstance(interaction.channel, TextChannel)
+        )
+        await interaction.message.edit(view=TicketCloseToggleView(self.ticket_manager))
+        await interaction.response.send_message(
+            content="關閉頻道已取消。", ephemeral=True
+        )
