@@ -1,7 +1,18 @@
 import os
 import discord
 from discord.ext import commands
-from config import pre, app_id, bot_token, My_user_id, version, app_mode
+from config import (
+    pre,
+    app_id,
+    bot_token,
+    My_user_id,
+    version,
+    app_mode,
+    db_url,
+    MY_GUILD,
+)
+from core.ticket_manager import TicketManager
+from db.database_manager import DatabaseManager
 
 
 class DragonBot(commands.Bot):
@@ -14,12 +25,17 @@ class DragonBot(commands.Bot):
             description=f"Dragon Bot version {version}\n Mode {app_mode}",
             application_id=app_id,
         )
+        assert db_url is not None
+        self.db_manager = DatabaseManager(database_url=db_url)
+        self.ticket_manager = TicketManager(bot=self, database_manager=self.db_manager)
 
     async def on_ready(self):
         print(f"{self.user} is now online!")
         await self.change_presence(
             activity=discord.Game(f"Developed by {self.get_user(My_user_id)}")
         )
+        self.tree.copy_global_to(guild=MY_GUILD)
+        await self.tree.sync(guild=MY_GUILD)
         # with open("purchase_msg_info.json", "r") as file:
         #     data = json.load(file)
         #

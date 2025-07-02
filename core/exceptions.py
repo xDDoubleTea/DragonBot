@@ -1,0 +1,17 @@
+"""
+This file contains custom exceptions for the DragonBot application.
+"""
+
+
+class ChannelCreationFail(Exception):
+    """
+    Raised when the bot fails to create a new ticket channel.
+
+    This can happen due to a variety of reasons, such as:
+    - The bot lacks the 'Manage Channels' permission.
+    - The server has reached its maximum channel limit (500).
+    """
+
+    def __init__(self, message="Failed to create ticket channel."):
+        self.message = message
+        super().__init__(self.message)

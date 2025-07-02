@@ -1,9 +1,6 @@
-import os
-from dotenv import load_dotenv
 from typing import Any, Dict, Union, List
 import psycopg2
 from psycopg2.extras import RealDictCursor, RealDictRow
-from config import TicketStatus
 
 
 class DatabaseManager:
@@ -142,30 +139,4 @@ class DatabaseManager:
 
 
 if __name__ == "__main__":
-    load_dotenv()
-    db_url = os.getenv("DATABASE_TEST_URL", "")
-    with DatabaseManager(db_url) as db_manager:
-        ticket_columns = [
-            ("id", "SERIAL PRIMARY KEY"),
-            ("channel_id", "BIGINT"),
-            ("auto_timeout", "INTEGER"),
-            ("timed_out", "INTEGER"),
-            ("first_msg_id", "BIGINT"),
-            ("status", "INTEGER"),
-            ("participant_ids", "BIGINT[]"),
-        ]
-        db_manager.create_table(table_name="tickets", columns=ticket_columns)
-        init_usr_data = {
-            "channel_id": 10100,
-            "auto_timeout": 48,
-            "timed_out": 0,
-            "first_msg_id": 128182,
-            "status": TicketStatus.OPEN,
-            "participant_ids": [12374],
-        }
-        db_manager.insert(table_name="tickets", data=init_usr_data)
-        print(
-            db_manager.select(
-                table_name="tickets", criteria={"status": TicketStatus.OPEN}
-            )
-        )
+    print("Nothing was done...")
