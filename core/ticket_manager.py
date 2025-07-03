@@ -1,13 +1,12 @@
 import discord
 from discord.ext import commands
 from discord import Guild, User, Member, Embed, TextChannel
-from typing import Union, Type
+from typing import Union, List
 from discord.ui import View
-from psycopg2.extras import RealDictRow
 import yaml
-from config.models import TicketStatus
+from config.models import Ticket, TicketStatus
 from db.database_manager import DatabaseManager
-from core.exceptions import ChannelCreationFail
+from core.exceptions import ChannelCreationFail, ChannelNotTicket
 from config.constants import cus_service_role_id, eng_to_chinese
 from utils.embed_utils import create_themed_embed
 
@@ -46,6 +45,50 @@ class TicketManager:
                     fetch_one=True,
                 )
                 else False
+            )
+
+    def get_ticket(self, channel_id: int) -> Union[Ticket, None]:
+        with self.database_manager as db:
+            ticket = db.select(
+                table_name="tickets",
+                criteria={"channel_id": channel_id},
+                fetch_one=True,
+            )
+            if not ticket:
+                return None
+            assert isinstance(ticket, dict)
+            return Ticket(
+                db_id=ticket["id"],
+                channel_id=channel_id,
+                auto_timeout=ticket["auto_timeout"],
+                timed_out=ticket["timed_out"],
+                close_msg_id=ticket["close_msg_id"],
+                status=TicketStatus(ticket["status"]),
+                guild_id=ticket["guild_id"],
+            )
+
+    def get_ticket_participants(self, ticket_id: int) -> Union[List[int], None]:
+        with self.database_manager as db:
+            participants = db.select(
+                table_name="ticket_participants",
+                criteria={"ticket_id": ticket_id},
+            )
+            if not participants:
+                return None
+            assert isinstance(participants, list)
+            return [p["participant_id"] for p in participants]
+
+    def add_ticket_participants(
+        self, channel_id: int, participant_id: int
+    ) -> Union[List[int], None]:
+        ticket = self.get_ticket(channel_id=channel_id)
+        if not ticket:
+            raise ChannelNotTicket
+        with self.database_manager as db:
+            db.insert(
+                table_name="ticket_participants",
+                data={"ticket_id": ticket.db_id, "participant_id": participant_id},
+                returning_col="ticket_id",
             )
 
     async def get_close_msg_id(self, channel_id: int) -> Union[int, None]:
@@ -114,6 +157,7 @@ class TicketManager:
                     "timed_out": 0,
                     "close_msg_id": msg.id,
                     "status": TicketStatus.OPEN,
+                    "guild_id": guild.id,
                 },
             )
             await new_channel.edit(name=f"{ticket_type}-{new_ticket_id}")
