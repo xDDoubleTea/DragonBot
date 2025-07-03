@@ -78,7 +78,7 @@ class TicketManager:
             assert isinstance(participants, list)
             return [p["participant_id"] for p in participants]
 
-    def add_ticket_participants(
+    def add_ticket_participant(
         self, channel_id: int, participant_id: int
     ) -> Union[List[int], None]:
         ticket = self.get_ticket(channel_id=channel_id)
