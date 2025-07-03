@@ -15,3 +15,13 @@ class ChannelCreationFail(Exception):
     def __init__(self, message="Failed to create ticket channel."):
         self.message = message
         super().__init__(self.message)
+
+
+class ChannelNotTicket(TypeError):
+    """
+    Raised when the channel is not a ticket
+    """
+
+    def __init__(self, message="This channel is not a ticket channel."):
+        self.message = message
+        super().__init__(self.message)
