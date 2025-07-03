@@ -25,5 +25,6 @@ class Ticket:
     channel_id: int
     auto_timeout: int
     timed_out: int
-    first_msg_id: int
+    close_msg_id: int
     status: TicketStatus
+    guild_id: int
