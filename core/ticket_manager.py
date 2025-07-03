@@ -6,9 +6,21 @@ from discord.ui import View
 import yaml
 from config.models import Ticket, TicketStatus
 from db.database_manager import DatabaseManager
-from core.exceptions import ChannelCreationFail, ChannelNotTicket
-from config.constants import cus_service_role_id, eng_to_chinese
+from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFound
+from config.constants import (
+    cus_service_role_id,
+    eng_to_chinese,
+    bot_token,
+    THEME_COLOR,
+    archive_channel_id,
+)
+import asyncio
 from utils.embed_utils import create_themed_embed
+import subprocess
+from datetime import datetime, timedelta
+
+import tempfile
+import pathlib
 
 
 class TicketManager:
@@ -78,16 +90,81 @@ class TicketManager:
             assert isinstance(participants, list)
             return [p["participant_id"] for p in participants]
 
-    def add_ticket_participant(
+    async def add_ticket_participant(
         self, channel_id: int, participant_id: int
     ) -> Union[List[int], None]:
         ticket = self.get_ticket(channel_id=channel_id)
         if not ticket:
             raise ChannelNotTicket
+        ticket_guild = self.bot.get_guild(ticket.guild_id)
+        if not ticket_guild:
+            ticket_guild = await self.bot.fetch_guild(ticket.guild_id)
+        ticket_channel = ticket_guild.get_channel(channel_id)
+        assert isinstance(ticket_channel, TextChannel)
+        member_obj = ticket_guild.get_member(participant_id)
+
+        if not member_obj:
+            raise Exception(f"Member object cannot be find with id {participant_id}")
+
+        if not isinstance(ticket_channel, TextChannel):
+            raise Exception(
+                f"Ticket channel with channel id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
+            )
+
+        overwrites = ticket_channel.overwrites
+        overwrites[member_obj] = discord.PermissionOverwrite(read_messages=True)
         with self.database_manager as db:
-            db.insert(
+            try:
+                db.insert(
+                    table_name="ticket_participants",
+                    data={"ticket_id": ticket.db_id, "participant_id": participant_id},
+                    returning_col="ticket_id",
+                )
+            except Exception as e:
+                print(
+                    f"Error occured when adding user with id {participant_id} into database. {e}"
+                )
+
+    async def add_ticket_participants(
+        self, channel_id: int, *participants_id: int
+    ) -> Union[List[int], None]:
+        ticket = self.get_ticket(channel_id=channel_id)
+        if not ticket:
+            raise ChannelNotTicket
+
+        ticket_guild = self.bot.get_guild(ticket.guild_id)
+        # This uses the cache
+
+        if not ticket_guild:
+            ticket_guild = await self.bot.fetch_guild(ticket.guild_id)
+
+        ticket_channel = ticket_guild.get_channel(channel_id)
+        if not isinstance(ticket_channel, TextChannel):
+            raise Exception(
+                f"Ticket channel with channel id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
+            )
+
+        overwrites = ticket_channel.overwrites
+        members_to_add_to_db = []
+
+        for part_id in participants_id:
+            member = ticket_guild.get_member(part_id)
+            if member:
+                overwrites[member] = discord.PermissionOverwrite(read_messages=True)
+                members_to_add_to_db.append(part_id)
+            else:
+                print(
+                    f"Warning: Could not find member with ID {part_id} in guild with id {ticket.guild_id}."
+                )
+
+        with self.database_manager as db:
+            data = [
+                {"ticket_id": ticket.db_id, "participant_id": participant_id}
+                for participant_id in participants_id
+            ]
+            db.insert_many(
                 table_name="ticket_participants",
-                data={"ticket_id": ticket.db_id, "participant_id": participant_id},
+                data=data,
                 returning_col="ticket_id",
             )
 
@@ -118,7 +195,7 @@ class TicketManager:
                 criteria={"channel_id": channel_id},
             )
 
-    async def create_channel(
+    async def create_ticket(
         self,
         user: Union[User, Member],
         guild: Guild,
@@ -169,27 +246,104 @@ class TicketManager:
 
         return new_channel
 
-    async def close_channel(self, channel: TextChannel):
+    async def close_ticket(self, channel: TextChannel):
+        ticket = self.get_ticket(channel_id=channel.id)
+        if not ticket:
+            raise TicketNotFound
         with self.database_manager as db:
             db.update(
                 table_name="tickets",
                 data={"status": TicketStatus.CLOSED},
                 criteria={"channel_id": channel.id},
             )
-            ticket = db.select(
-                table_name="tickets",
-                criteria={"channel_id": channel.id},
-                fetch_one=True,
-            )
-            assert ticket and isinstance(ticket, dict)
+
             # Set the participants' permission
             participants_id = db.select(
-                "ticket_participants", criteria={"ticket_id": ticket["id"]}
+                "ticket_participants", criteria={"ticket_id": ticket.db_id}
             )
-            print(participants_id)
+            customers_mention = ""
             assert participants_id and isinstance(participants_id, list)
+            cus_num = 0
             for participant_id in participants_id:
                 part_id = participant_id["participant_id"]
                 member = channel.guild.get_member(part_id)
                 if member:
                     await channel.set_permissions(target=member, read_messages=False)
+                    customers_mention += member.mention + ", "
+                    cus_num += 1
+                else:
+                    print(
+                        f"Warning: Could not find member with ID {part_id} in guild with id {ticket.guild_id}."
+                    )
+            # Generate the channel history archive
+            msg = await channel.send("頻道紀錄檔案生成中...")
+            try:
+                loop = asyncio.get_running_loop()
+
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    output_path = pathlib.Path(temp_dir)
+                    assert bot_token
+
+                    command = [
+                        "vendor/DiscordChatExporterCLI/DiscordChatExporter.Cli",
+                        "export",
+                        "--channel",
+                        str(channel.id),
+                        "--token",
+                        bot_token,
+                        "--output",
+                        str(output_path),
+                    ]
+
+                    await loop.run_in_executor(
+                        None,
+                        lambda: subprocess.run(
+                            command, capture_output=True, text=True, check=True
+                        ),
+                    )
+
+                    exported_files = list(output_path.glob("*.html"))
+
+                    if not exported_files:
+                        raise FileNotFoundError("No exported files found.")
+                    else:
+                        # Simply get the first item. It's already a full, usable path object.
+                        transcript_path = exported_files[0]
+                        transcript_file = discord.File(
+                            fp=f"{transcript_path}",
+                            filename=f"{channel.name}.html",
+                        )
+
+                    archive_channel = self.bot.get_channel(archive_channel_id)
+                    assert isinstance(archive_channel, TextChannel)
+                    UTC_to_GMT = timedelta(hours=8)
+                    new = channel.created_at + UTC_to_GMT
+                    created_time_str = new.strftime("%Y/%m/%d %H:%M:%S")
+                    closed_time_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                    embed = discord.Embed(
+                        title=f"頻道 「{channel.name}」紀錄",
+                        description=f"顧客：{customers_mention}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
+                        color=THEME_COLOR,
+                    )
+                    new = await archive_channel.send(embed=embed)
+                    new = await new.edit(attachments=[transcript_file])
+
+                msg = await msg.edit(content="生成完成✅傳送回饋單給客戶中...")
+            except subprocess.CalledProcessError as e:
+                # This block will run if the exporter command fails
+                print(f"Error exporting channel {channel.id}: {e}")
+                await msg.edit(content="錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
+                raise Exception("錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
+            except FileNotFoundError:
+                # This block will run if the DiscordChatExporter.Cli executable is not found
+                print("Error: DiscordChatExporter.Cli not found.")
+                await msg.edit(content="錯誤：找不到匯出工具。")
+                raise FileNotFoundError("Error: DiscordChatExporter.Cli not found.")
+
+    async def delete_ticket(self, channel: TextChannel):
+        with self.database_manager as db:
+            db.delete(table_name="tickets", criteria={"channel_id": channel.id})
+            await channel.delete()
+
+    async def reopen_ticket(self, channel: TextChannel):
+        pass

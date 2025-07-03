@@ -16,7 +16,7 @@ class TicketCreationView(View):
         await interaction.response.send_message("建立新頻道中...", ephemeral=True)
         try:
             assert interaction.guild
-            new_channel = await self.ticket_manager.create_channel(
+            new_channel = await self.ticket_manager.create_ticket(
                 user=interaction.user,
                 guild=interaction.guild,
                 ticket_type=ticket_type,
@@ -108,8 +108,17 @@ class TicketCloseView(View):
         if msg.components is not None:
             await msg.edit(view=None)
         # Actually close the channel
-        await self.ticket_manager.close_channel(channel=interaction.channel)
-        await interaction.response.send_message(content="頻道已關閉。接下來你想要？")
+        await interaction.response.send_message("處理中...")
+        async with interaction.channel.typing():
+            try:
+                await self.ticket_manager.close_ticket(channel=interaction.channel)
+            except Exception as e:
+                print("Error: ", e)
+            else:
+                # Then send the After Close view
+                view = TicketAfterClose(ticket_manager=self.ticket_manager)
+                msg = await interaction.original_response()
+                await msg.edit(content="頻道已關閉。接下來你想要？", view=view)
 
     @button(label="取消", style=discord.ButtonStyle.gray)
     async def cancel_callback(self, interaction: Interaction, button: Button):
@@ -122,3 +131,37 @@ class TicketCloseView(View):
         await interaction.response.send_message(
             content="關閉頻道已取消。", ephemeral=True
         )
+
+
+class TicketAfterClose(View):
+    def __init__(self, ticket_manager: TicketManager):
+        super().__init__(timeout=None)
+        self.ticket_manager = ticket_manager
+
+    @button(label="刪除頻道", style=discord.ButtonStyle.red)
+    async def del_callback(self, interaction: Interaction, button: Button):
+        await interaction.response.defer()
+        assert isinstance(interaction.channel, TextChannel)
+        return await self.ticket_manager.delete_ticket(channel=interaction.channel)
+
+    @button(label="重新開啟頻道", style=discord.ButtonStyle.green)
+    async def reopen_callback(self, interaction: Interaction, button: Button):
+        pass
+        # get the customers of the channel
+        # now_channel = 0
+        # for index, channel in enumerate(self.main.channel_info):
+        #     if channel[1] == interaction.channel.id:
+        #         now_channel = self.main.channel_info[index]
+        #         break
+        # # set the permissions
+        # for customer in now_channel[0]:
+        #     try:
+        #         perms = interaction.channel.overwrites_for(customer)
+        #         perms.read_messages = True
+        #         await interaction.channel.set_permissions(customer, overwrite=perms)
+        #     except:
+        #         pass
+        # await interaction.message.edit(view=None)
+        # await interaction.response.send_message("頻道已被重新開啟")
+        # msg = await interaction.original_response()
+        # return await msg.edit(view=CloseToggle(main=self.main, attached_msg=msg))

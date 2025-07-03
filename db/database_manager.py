@@ -97,6 +97,37 @@ class DatabaseManager:
             return result[returning_col]
         return None
 
+    def insert_many(
+        self, table_name: str, data: List[Dict[str, Any]], returning_col: str = "id"
+    ):
+        """
+        Inserts multiple rows into a table in a single transaction.
+
+        Args:
+            table_name (str): The table name to insert data.
+            data (List[Dict[str, Any]]): The data list to insert.
+        """
+        if not data:
+            return
+
+        columns = data[0].keys()
+        columns_sql = ", ".join(columns)
+        placeholders_sql = ", ".join(["%s"] * len(columns))
+
+        values_to_insert = [tuple(row[col] for col in columns) for row in data]
+
+        query = f'INSERT INTO {table_name} ({columns_sql}) VALUES ({placeholders_sql}) RETURNING "{returning_col}"'
+
+        try:
+            assert self.cursor
+            self.cursor.executemany(query, values_to_insert)
+            result = self.cursor.fetchone()
+            if result:
+                return result[returning_col]
+        except Exception as e:
+            print(f"Error during bulk insert: {e}")
+            raise
+
     def update(self, table_name: str, data, criteria: Dict[str, Any] = dict()) -> int:
         """
         Updates records from a table where the criteria match.
