@@ -25,3 +25,9 @@ class ChannelNotTicket(TypeError):
     def __init__(self, message="This channel is not a ticket channel."):
         self.message = message
         super().__init__(self.message)
+
+
+class TicketNotFound(TypeError):
+    def __init__(self, message="Ticket not found."):
+        self.message = message
+        super().__init__(self.message)
