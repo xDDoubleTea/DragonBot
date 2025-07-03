@@ -13,7 +13,8 @@ __all__ = [
     "cmd_channel_id",
     "cus_service_role_id",
     "THEME_COLOR",
-    "logchannel",
+    "logchannel_id",
+    "archive_channel_id",
     "app_id",
     "MY_GUILD",
     "NOT_REQUESTABLE_ROLES_ID",
@@ -69,10 +70,11 @@ cus_service_role_id = 856792148060667934 if app_mode == "prod" else 138889658017
 
 THEME_COLOR = Color.from_rgb(190, 119, 255)
 
-logchannel = 977445485180751882 if app_mode == "prod" else 1388896453446991902
+logchannel_id = 977445485180751882 if app_mode == "prod" else 1388896453446991902
 # In production guild, logchannel is 977445485180751882
 # In test guild, logchannel is 1388896453446991902
 
+archive_channel_id = 1015983550782263356 if app_mode == "prod" else 1390385918816292895
 
 app_id = 973570456076558406 if app_mode == "prod" else 865240620233785344
 # In production guild, app_id is 973570456076558406
