@@ -1,4 +1,5 @@
 from discord import Interaction, TextChannel
+import discord
 from discord.ext import commands
 from discord.ext.commands import Cog
 from discord.ext.commands.hybrid import app_commands
@@ -16,6 +17,79 @@ class tickets(Cog):
     def __init__(self, bot: commands.Bot, ticket_manager: TicketManager):
         self.bot = bot
         self.ticket_manager = ticket_manager
+        self.panel_message_ids = set()
+
+    @Cog.listener(name="on_ready")
+    async def on_ready(self):
+        with self.ticket_manager.database_manager as db:
+            all_panels = db.select(table_name="ticket_panels")
+        if not all_panels:
+            print("No ticket panels found in the database.")
+            return
+        assert isinstance(all_panels, list)
+        for panel in all_panels:
+            guild_id = panel.get("guild_id")
+            channel_id = panel.get("channel_id")
+            message_id = panel.get("message_id")
+            assert guild_id and channel_id and message_id
+            try:
+                guild = self.bot.get_guild(guild_id)
+                if not guild:
+                    print(f"Cannot find guild with ID {guild_id}. Skipping.")
+                    continue
+                channel = guild.get_channel(channel_id)
+                if not channel or not isinstance(channel, TextChannel):
+                    print(
+                        f"Cannot find channel with ID {channel_id} in guild {guild_id}."
+                    )
+                    continue
+                message = await channel.fetch_message(message_id)
+
+                view = TicketCreationView(ticket_manager=self.ticket_manager)
+                await message.edit(view=view)
+                self.panel_message_ids.add(message.id)
+
+            except discord.errors.NotFound:
+                # The message was deleted
+                print(
+                    f"Could not find message with ID {message_id}. Deleting panel record."
+                )
+                with self.ticket_manager.database_manager as db:
+                    db.delete("ticket_panels", {"guild_id": guild_id})
+            except Exception as e:
+                print(
+                    f"An error occurred while re-attaching view for guild {guild_id}: {e}"
+                )
+
+    @Cog.listener(name="on_guild_channel_delete")
+    async def on_guild_channel_delete(self, channel):
+        if not isinstance(channel, TextChannel):
+            return
+        with self.ticket_manager.database_manager as db:
+            delete_cnl = db.select(
+                table_name="ticket_panels",
+                criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
+                fetch_one=True,
+            )
+            if delete_cnl:
+                db.delete(
+                    table_name="ticket_panels",
+                    criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
+                )
+                assert isinstance(delete_cnl, dict)
+                message_id = delete_cnl["message_id"]
+                if message_id in self.panel_message_ids:
+                    self.panel_message_ids.remove(message_id)
+
+    @Cog.listener(name="on_message_delete")
+    async def on_message_delete(self, message):
+        if message.id in self.panel_message_ids:
+            with self.ticket_manager.database_manager as db:
+                db.delete(
+                    table_name="ticket_panels", criteria={"message_id": message.id}
+                )
+
+            self.panel_message_ids.remove(message.id)
 
     @app_commands.command(
         name="close_ticket",
@@ -92,6 +166,18 @@ class tickets(Cog):
                 view=view,
                 embed=embed,
             )
+            msg = await interaction.original_response()
+            with self.ticket_manager.database_manager as db:
+                db.insert(
+                    table_name="ticket_panels",
+                    data={
+                        "guild_id": interaction.guild_id,
+                        "channel_id": interaction.channel_id,
+                        "message_id": msg.id,
+                    },
+                    returning_col="message_id",
+                )
+                self.panel_message_ids.add(msg.id)
         except AssertionError:
             return await interaction.response.send_message(
                 content="Please try again.", ephemeral=True

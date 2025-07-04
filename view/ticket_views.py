@@ -1,35 +1,63 @@
 import discord
-from discord import Interaction, TextChannel
-from discord.ui import View, button, Button
+from discord import Interaction, TextChannel, User
+from discord.ui import Modal, View, button, Button
 
 from core.ticket_manager import TicketManager
 from config.constants import DS01, DISCORD_EMOJI
 from core.exceptions import ChannelCreationFail
 
 
+class QuestionModal(Modal):
+    def __init__(self, ticket_manager: TicketManager, ticket_type: str):
+        super().__init__(title="問題表單")
+        self.ticket_manager = ticket_manager
+        self.ticket_type = ticket_type
+
+    ques = discord.ui.TextInput(
+        label="問題描述",
+        style=discord.TextStyle.paragraph,
+        placeholder="範例：我已經下單了，為何還沒有收到貨？\n我的訂單編號是#25565",
+        required=True,
+    )
+
+    async def on_submit(self, interaction: Interaction) -> None:
+        # Defer ephemerally. This shows a private "thinking" message
+        # while we create the channel, preventing timeouts.
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        try:
+            assert interaction.guild is not None
+
+            # 1. Create the ticket channel.
+            new_channel = await self.ticket_manager.create_ticket(
+                user=interaction.user,
+                guild=interaction.guild,
+                ticket_type=self.ticket_type,
+                close_view=TicketCloseToggleView(self.ticket_manager),
+            )
+
+            if not new_channel:
+                raise ChannelCreationFail("Ticket manager failed to return a channel.")
+
+            # 2. Send the user's question directly into the new channel.
+            await new_channel.send(
+                content=f"**來自 {interaction.user.mention} 的問題：**\n>>> {self.ques.value}"
+            )
+
+            # 3. Send a final, persistent confirmation to the user.
+            await interaction.followup.send(
+                f"已將問題描述傳送至客服頻道：{new_channel.mention}"
+            )
+
+        except Exception as e:
+            print(f"Error during modal ticket creation: {e}")
+            await interaction.followup.send("❌ 建立頻道時發生錯誤，請稍後再試一次！")
+
+
 class TicketCreationView(View):
     def __init__(self, ticket_manager: TicketManager):
         self.ticket_manager = ticket_manager
         super().__init__(timeout=None)
-
-    async def _handle_cnl_creation(self, interaction: Interaction, ticket_type: str):
-        await interaction.response.send_message("建立新頻道中...", ephemeral=True)
-        try:
-            assert interaction.guild
-            new_channel = await self.ticket_manager.create_ticket(
-                user=interaction.user,
-                guild=interaction.guild,
-                ticket_type=ticket_type,
-                close_view=TicketCloseToggleView(self.ticket_manager),
-            )
-            if not new_channel:
-                raise ChannelCreationFail("Failed creating channel.")
-            msg = await interaction.original_response()
-            return await msg.edit(content=f"建立了一個新頻道!{new_channel.mention}")
-        except Exception as e:
-            print("Error during ticket creation :", e)
-            msg = await interaction.original_response()
-            await msg.edit(content="發生錯誤，請再試一次！")
 
     @button(
         label="代購問題",
@@ -39,9 +67,10 @@ class TicketCreationView(View):
     )
     async def pur_callback(self, interaction: Interaction, button: Button):
         assert button.custom_id
-        await self._handle_cnl_creation(
-            interaction=interaction, ticket_type=button.custom_id
+        modal = QuestionModal(
+            ticket_manager=self.ticket_manager, ticket_type=button.custom_id
         )
+        await interaction.response.send_modal(modal)
 
     @button(
         label="群組問題",
@@ -51,9 +80,10 @@ class TicketCreationView(View):
     )
     async def guild_callback(self, interaction: Interaction, button: Button):
         assert button.custom_id
-        await self._handle_cnl_creation(
-            interaction=interaction, ticket_type=button.custom_id
+        modal = QuestionModal(
+            ticket_manager=self.ticket_manager, ticket_type=button.custom_id
         )
+        await interaction.response.send_modal(modal)
 
     @button(
         label="其他問題",
@@ -63,9 +93,10 @@ class TicketCreationView(View):
     )
     async def others_callback(self, interaction: Interaction, button: Button):
         assert button.custom_id
-        await self._handle_cnl_creation(
-            interaction=interaction, ticket_type=button.custom_id
+        modal = QuestionModal(
+            ticket_manager=self.ticket_manager, ticket_type=button.custom_id
         )
+        await interaction.response.send_modal(modal)
 
 
 class TicketCloseToggleView(View):
@@ -103,22 +134,21 @@ class TicketCloseView(View):
             and interaction.channel
             and isinstance(interaction.channel, TextChannel)
         )
-        async with interaction.channel.typing():
-            await interaction.message.edit(view=None)
-            msg = interaction.message
-            if msg.components is not None:
-                await msg.edit(view=None)
-            # Actually close the channel
-            await interaction.response.send_message("處理中...")
-            try:
-                await self.ticket_manager.close_ticket(channel=interaction.channel)
-            except Exception as e:
-                print("Error: ", e)
-            else:
-                # Then send the After Close view
-                view = TicketAfterClose(ticket_manager=self.ticket_manager)
-                msg = await interaction.original_response()
-                await msg.edit(content="頻道已關閉。接下來你想要？", view=view)
+        await interaction.response.defer(thinking=True)
+        await interaction.message.edit(view=None)
+
+        # Actually close the channel
+        try:
+            await self.ticket_manager.close_ticket(channel=interaction.channel)
+            view = TicketAfterClose(ticket_manager=self.ticket_manager)
+            await interaction.followup.send(
+                content="頻道已關閉。接下來你想要？", view=view
+            )
+        except Exception as e:
+            print("Error: ", e)
+            await interaction.followup.send(
+                "關閉頻道時發生錯誤，請稍後再試。", ephemeral=True
+            )
 
     @button(label="取消", style=discord.ButtonStyle.gray)
     async def cancel_callback(self, interaction: Interaction, button: Button):
@@ -140,28 +170,17 @@ class TicketAfterClose(View):
 
     @button(label="刪除頻道", style=discord.ButtonStyle.red)
     async def del_callback(self, interaction: Interaction, button: Button):
-        await interaction.response.defer()
+        await interaction.response.defer(thinking=True)
         assert isinstance(interaction.channel, TextChannel)
-        return await self.ticket_manager.delete_ticket(channel=interaction.channel)
+        await self.ticket_manager.delete_ticket(channel=interaction.channel)
 
     @button(label="重新開啟頻道", style=discord.ButtonStyle.green)
     async def reopen_callback(self, interaction: Interaction, button: Button):
-        pass
-        # get the customers of the channel
-        # now_channel = 0
-        # for index, channel in enumerate(self.main.channel_info):
-        #     if channel[1] == interaction.channel.id:
-        #         now_channel = self.main.channel_info[index]
-        #         break
-        # # set the permissions
-        # for customer in now_channel[0]:
-        #     try:
-        #         perms = interaction.channel.overwrites_for(customer)
-        #         perms.read_messages = True
-        #         await interaction.channel.set_permissions(customer, overwrite=perms)
-        #     except:
-        #         pass
-        # await interaction.message.edit(view=None)
-        # await interaction.response.send_message("頻道已被重新開啟")
-        # msg = await interaction.original_response()
-        # return await msg.edit(view=CloseToggle(main=self.main, attached_msg=msg))
+        await interaction.response.defer(thinking=True)
+        assert isinstance(interaction.channel, TextChannel)
+        await self.ticket_manager.reopen_ticket(channel=interaction.channel)
+        await interaction.followup.send(
+            "頻道已經被重新開啟！", view=TicketCloseToggleView(self.ticket_manager)
+        )
+        assert interaction.message
+        await interaction.message.edit(view=None)

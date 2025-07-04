@@ -125,8 +125,55 @@ class TicketManager:
                     f"Error occured when adding user with id {participant_id} into database. {e}"
                 )
 
+    async def _update_participants_permissions(
+        self,
+        channel: TextChannel,
+        participants_id: List[int],
+        allow_read: bool,
+        current_participants: set,
+    ) -> List[int]:
+        """
+        A private helper to grant or revoke channel visibility for a list of participants.
+
+        Args:
+            channel: The ticket channel to modify.
+            participants_id: A list of member IDs.
+            allow_read: If True, grants read access. If False, revokes it.
+            current_participants: A set of currently active participants in the channel.
+        """
+        permission_updates = []
+        member_updates = []
+        for part_id in participants_id:
+            member = channel.guild.get_member(part_id)
+            if not member:
+                print(
+                    f"Warning: Could not find member with ID {part_id} in guild {channel.guild.id} to update permissions."
+                )
+                continue
+            if allow_read and part_id not in current_participants:
+                # If we are granting read access and the member is not already a participant
+                member_updates.append(part_id)
+            elif not allow_read and part_id in current_participants:
+                # If we are revoking read access and the member is already a participant
+                member_updates.append(part_id)
+
+            overwrite = discord.PermissionOverwrite(
+                view_channel=allow_read,
+                read_messages=allow_read,
+                send_messages=allow_read,
+            )
+            permission_updates.append(
+                channel.set_permissions(member, overwrite=overwrite)
+            )
+
+        # Run all permission updates concurrently for better performance
+        if permission_updates:
+            await asyncio.gather(*permission_updates)
+
+        return member_updates
+
     async def add_ticket_participants(
-        self, channel_id: int, *participants_id: int
+        self, channel_id: int, participants_id: List[int]
     ) -> Union[List[int], None]:
         ticket = await self.get_ticket(channel_id=channel_id)
         if not ticket:
@@ -143,24 +190,21 @@ class TicketManager:
             raise Exception(
                 f"Ticket channel with channel id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
             )
-
-        overwrites = ticket_channel.overwrites
-        members_to_add_to_db = []
-
-        for part_id in participants_id:
-            member = ticket_guild.get_member(part_id)
-            if member:
-                overwrites[member] = discord.PermissionOverwrite(read_messages=True)
-                members_to_add_to_db.append(part_id)
-            else:
-                print(
-                    f"Warning: Could not find member with ID {part_id} in guild with id {ticket.guild_id}."
-                )
+        current_participants = self.get_ticket_participants(ticket_id=ticket.db_id)
+        if not current_participants:
+            raise Exception("No participants found for the ticket.")
+        current_participants = set(current_participants)
+        member_to_add_to_db = await self._update_participants_permissions(
+            channel=ticket_channel,
+            participants_id=participants_id,
+            allow_read=True,
+            current_participants=current_participants,
+        )
 
         with self.database_manager as db:
             data = [
                 {"ticket_id": ticket.db_id, "participant_id": participant_id}
-                for participant_id in participants_id
+                for participant_id in member_to_add_to_db
             ]
             db.insert_many(
                 table_name="ticket_participants",
@@ -357,4 +401,14 @@ class TicketManager:
             await channel.delete()
 
     async def reopen_ticket(self, channel: TextChannel):
-        pass
+        ticket = await self.get_ticket(channel_id=channel.id)
+        if not ticket:
+            raise ChannelNotTicket
+        participants_id = self.get_ticket_participants(ticket_id=ticket.db_id)
+        assert participants_id
+        await self._update_participants_permissions(
+            channel=channel,
+            participants_id=participants_id,
+            allow_read=True,
+            current_participants=set(),
+        )
