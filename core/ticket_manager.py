@@ -4,7 +4,7 @@ from discord import Guild, User, Member, Embed, TextChannel
 from typing import Union, List
 from discord.ui import View
 import yaml
-from config.models import Ticket, TicketStatus
+from config.models import CloseMessageType, Ticket, TicketStatus
 from db.database_manager import DatabaseManager
 from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFound
 from config.constants import (
@@ -77,6 +77,7 @@ class TicketManager:
                 close_msg_id=ticket["close_msg_id"],
                 status=TicketStatus(ticket["status"]),
                 guild_id=ticket["guild_id"],
+                close_msg_type=ticket["close_msg_type"],
             )
 
     def get_ticket_participants(self, ticket_id: int) -> Union[List[int], None]:
@@ -191,26 +192,67 @@ class TicketManager:
                 f"Ticket channel with channel id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
             )
         current_participants = self.get_ticket_participants(ticket_id=ticket.db_id)
-        if not current_participants:
-            raise Exception("No participants found for the ticket.")
-        current_participants = set(current_participants)
+        current_participants = (
+            set(current_participants) if current_participants else set()
+        )
         member_to_add_to_db = await self._update_participants_permissions(
             channel=ticket_channel,
             participants_id=participants_id,
             allow_read=True,
             current_participants=current_participants,
         )
-
         with self.database_manager as db:
             data = [
-                {"ticket_id": ticket.db_id, "participant_id": participant_id}
+                {
+                    "ticket_id": ticket.db_id,
+                    "participant_id": participant_id,
+                }
                 for participant_id in member_to_add_to_db
             ]
             db.insert_many(
                 table_name="ticket_participants",
                 data=data,
-                returning_col="ticket_id",
             )
+        return member_to_add_to_db
+
+    async def remove_ticket_participants(
+        self, channel_id: int, participants_id: List[int]
+    ) -> Union[List[int], None]:
+        ticket = await self.get_ticket(channel_id=channel_id)
+        if not ticket:
+            raise ChannelNotTicket
+
+        ticket_guild = self.bot.get_guild(ticket.guild_id)
+        # This uses the cache
+
+        if not ticket_guild:
+            ticket_guild = await self.bot.fetch_guild(ticket.guild_id)
+
+        ticket_channel = ticket_guild.get_channel(channel_id)
+        if not isinstance(ticket_channel, TextChannel):
+            raise Exception(
+                f"Ticket channel with channel id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
+            )
+        current_participants = self.get_ticket_participants(ticket_id=ticket.db_id)
+        if not current_participants:
+            raise Exception("No participants found for the ticket.")
+        current_participants = set(current_participants)
+        member_to_remove_from_db = await self._update_participants_permissions(
+            channel=ticket_channel,
+            participants_id=participants_id,
+            allow_read=False,
+            current_participants=current_participants,
+        )
+
+        with self.database_manager as db:
+            db.delete(
+                table_name="ticket_participants",
+                criteria={
+                    "ticket_id": ticket.db_id,
+                    "participant_id": member_to_remove_from_db,
+                },
+            )
+        return member_to_remove_from_db
 
     async def get_close_msg_id(self, channel_id: int) -> Union[int, None]:
         """Get the close message ID for a given channel ID."""
@@ -230,12 +272,14 @@ class TicketManager:
                 )
                 return None
 
-    async def set_close_msg_id(self, channel_id: int, close_msg_id: int):
-        """Set the close message ID for a given channel ID."""
+    async def set_close_msg(
+        self, channel_id: int, close_msg_id: int, close_msg_type: CloseMessageType
+    ):
+        """Set the close message id and type for a given channel ID."""
         with self.database_manager as db:
             db.update(
                 table_name="tickets",
-                data={"close_msg_id": close_msg_id},
+                data={"close_msg_id": close_msg_id, "close_msg_type": close_msg_type},
                 criteria={"channel_id": channel_id},
             )
 
@@ -279,6 +323,7 @@ class TicketManager:
                     "close_msg_id": msg.id,
                     "status": TicketStatus.OPEN,
                     "guild_id": guild.id,
+                    "close_msg_type": CloseMessageType.CLOSE_TOGGLE,
                 },
             )
             await new_channel.edit(name=f"{ticket_type}-{new_ticket_id}")
