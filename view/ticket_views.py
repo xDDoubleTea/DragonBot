@@ -103,13 +103,13 @@ class TicketCloseView(View):
             and interaction.channel
             and isinstance(interaction.channel, TextChannel)
         )
-        await interaction.message.edit(view=None)
-        msg = interaction.message
-        if msg.components is not None:
-            await msg.edit(view=None)
-        # Actually close the channel
-        await interaction.response.send_message("處理中...")
         async with interaction.channel.typing():
+            await interaction.message.edit(view=None)
+            msg = interaction.message
+            if msg.components is not None:
+                await msg.edit(view=None)
+            # Actually close the channel
+            await interaction.response.send_message("處理中...")
             try:
                 await self.ticket_manager.close_ticket(channel=interaction.channel)
             except Exception as e:
