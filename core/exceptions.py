@@ -31,3 +31,18 @@ class TicketNotFound(TypeError):
     def __init__(self, message="Ticket not found."):
         self.message = message
         super().__init__(self.message)
+
+
+class PanelUnique(Exception):
+    def __init__(
+        self,
+        message="There should only be only one ticket open messages in every guild.",
+    ):
+        self.message = message
+        super().__init__(self.message)
+
+
+class NoParticipants(Exception):
+    def __init__(self, message="There are no participants for this ticket."):
+        self.message = message
+        super().__init__(self.message)
