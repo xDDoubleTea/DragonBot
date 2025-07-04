@@ -1,7 +1,7 @@
 from enum import IntEnum
 from dataclasses import dataclass
 
-__all__ = ["TicketStatus", "Ticket"]
+__all__ = ["TicketStatus", "Ticket", "CloseMessageType", "KeywordType"]
 
 
 class TicketStatus(IntEnum):
@@ -13,6 +13,25 @@ class TicketStatus(IntEnum):
     IN_PROGRESS = 1
     RESOLVED = 2
     CLOSED = 3
+
+
+class CloseMessageType(IntEnum):
+    """
+    Represents the close buttons type attached to the close message.
+    """
+
+    CLOSE_TOGGLE = 0
+    CLOSE = 1
+    AFTER_CLOSE = 2
+
+
+class KeywordType(IntEnum):
+    """
+    Represents the type of a keyword.
+    """
+
+    MATCH_START = 0
+    IS_SUBSTR = 1
 
 
 @dataclass
@@ -28,3 +47,4 @@ class Ticket:
     close_msg_id: int
     status: TicketStatus
     guild_id: int
+    close_msg_type: CloseMessageType
