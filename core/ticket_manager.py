@@ -59,7 +59,7 @@ class TicketManager:
                 else False
             )
 
-    def get_ticket(self, channel_id: int) -> Union[Ticket, None]:
+    async def get_ticket(self, channel_id: int) -> Union[Ticket, None]:
         with self.database_manager as db:
             ticket = db.select(
                 table_name="tickets",
@@ -93,7 +93,7 @@ class TicketManager:
     async def add_ticket_participant(
         self, channel_id: int, participant_id: int
     ) -> Union[List[int], None]:
-        ticket = self.get_ticket(channel_id=channel_id)
+        ticket = await self.get_ticket(channel_id=channel_id)
         if not ticket:
             raise ChannelNotTicket
         ticket_guild = self.bot.get_guild(ticket.guild_id)
@@ -128,7 +128,7 @@ class TicketManager:
     async def add_ticket_participants(
         self, channel_id: int, *participants_id: int
     ) -> Union[List[int], None]:
-        ticket = self.get_ticket(channel_id=channel_id)
+        ticket = await self.get_ticket(channel_id=channel_id)
         if not ticket:
             raise ChannelNotTicket
 
@@ -246,99 +246,110 @@ class TicketManager:
 
         return new_channel
 
+    def _run_archive_exporter_sync(self, channel_id: int, temp_dir: str) -> str:
+        """
+        A synchronous, blocking function that runs the chat exporter.
+        This is designed to be run in an executor.
+        It returns the path to the exported file.
+        """
+        output_path = pathlib.Path(temp_dir)
+        assert bot_token
+
+        command = [
+            "vendor/DiscordChatExporterCLI/DiscordChatExporter.Cli",
+            "export",
+            "--channel",
+            str(channel_id),
+            "--token",
+            bot_token,
+            "--output",
+            str(output_path),
+        ]
+
+        # This is the blocking call
+        subprocess.run(command, capture_output=True, text=True, check=True)
+
+        exported_files = list(output_path.glob("*.html"))
+        if not exported_files:
+            raise FileNotFoundError(
+                "Chat export completed, but no HTML file was found."
+            )
+
+        # Return the full path to the transcript
+        return str(exported_files[0])
+
     async def close_ticket(self, channel: TextChannel):
-        ticket = self.get_ticket(channel_id=channel.id)
+        ticket = await self.get_ticket(channel_id=channel.id)
         if not ticket:
             raise TicketNotFound
-        with self.database_manager as db:
-            db.update(
-                table_name="tickets",
-                data={"status": TicketStatus.CLOSED},
-                criteria={"channel_id": channel.id},
-            )
 
-            # Set the participants' permission
-            participants_id = db.select(
-                "ticket_participants", criteria={"ticket_id": ticket.db_id}
-            )
-            customers_mention = ""
-            assert participants_id and isinstance(participants_id, list)
-            cus_num = 0
-            for participant_id in participants_id:
-                part_id = participant_id["participant_id"]
-                member = channel.guild.get_member(part_id)
-                if member:
-                    await channel.set_permissions(target=member, read_messages=False)
-                    customers_mention += member.mention + ", "
-                    cus_num += 1
-                else:
-                    print(
-                        f"Warning: Could not find member with ID {part_id} in guild with id {ticket.guild_id}."
-                    )
+        def _sync_update_and_select():
+            with self.database_manager as db:
+                db.update(
+                    table_name="tickets",
+                    data={"status": TicketStatus.CLOSED},
+                    criteria={"channel_id": channel.id},
+                )
+                # We can also fetch the participants in the same transaction
+                return db.select(
+                    "ticket_participants", criteria={"ticket_id": ticket.db_id}
+                )
+
+        loop = asyncio.get_running_loop()
+        participants_id = await loop.run_in_executor(None, _sync_update_and_select)
+        customers_mention = ""
+        assert participants_id and isinstance(participants_id, list)
+        cus_num = 0
+        for participant_id in participants_id:
+            part_id = participant_id["participant_id"]
+            member = channel.guild.get_member(part_id)
+            if member:
+                await channel.set_permissions(target=member, read_messages=False)
+                customers_mention += member.mention + ", "
+                cus_num += 1
+            else:
+                print(
+                    f"Warning: Could not find member with ID {part_id} in guild with id {ticket.guild_id}."
+                )
             # Generate the channel history archive
-            msg = await channel.send("頻道紀錄檔案生成中...")
-            try:
-                loop = asyncio.get_running_loop()
+        customers_mention = customers_mention.rstrip(", ")
+        msg = await channel.send("頻道紀錄檔案生成中...")
+        try:
+            with tempfile.TemporaryDirectory() as temp_dir:
+                transcript_path = await loop.run_in_executor(
+                    None, self._run_archive_exporter_sync, channel.id, temp_dir
+                )
 
-                with tempfile.TemporaryDirectory() as temp_dir:
-                    output_path = pathlib.Path(temp_dir)
-                    assert bot_token
+                transcript_file = discord.File(
+                    fp=transcript_path,
+                    filename=f"{channel.name}.html",
+                )
 
-                    command = [
-                        "vendor/DiscordChatExporterCLI/DiscordChatExporter.Cli",
-                        "export",
-                        "--channel",
-                        str(channel.id),
-                        "--token",
-                        bot_token,
-                        "--output",
-                        str(output_path),
-                    ]
+                archive_channel = self.bot.get_channel(archive_channel_id)
+                assert isinstance(archive_channel, TextChannel)
+                UTC_to_GMT = timedelta(hours=8)
+                new = channel.created_at + UTC_to_GMT
+                created_time_str = new.strftime("%Y/%m/%d %H:%M:%S")
+                closed_time_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+                embed = discord.Embed(
+                    title=f"頻道 「{channel.name}」紀錄",
+                    description=f"顧客：{customers_mention}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
+                    color=THEME_COLOR,
+                )
+                new = await archive_channel.send(embed=embed)
+                new = await new.edit(attachments=[transcript_file])
 
-                    await loop.run_in_executor(
-                        None,
-                        lambda: subprocess.run(
-                            command, capture_output=True, text=True, check=True
-                        ),
-                    )
-
-                    exported_files = list(output_path.glob("*.html"))
-
-                    if not exported_files:
-                        raise FileNotFoundError("No exported files found.")
-                    else:
-                        # Simply get the first item. It's already a full, usable path object.
-                        transcript_path = exported_files[0]
-                        transcript_file = discord.File(
-                            fp=f"{transcript_path}",
-                            filename=f"{channel.name}.html",
-                        )
-
-                    archive_channel = self.bot.get_channel(archive_channel_id)
-                    assert isinstance(archive_channel, TextChannel)
-                    UTC_to_GMT = timedelta(hours=8)
-                    new = channel.created_at + UTC_to_GMT
-                    created_time_str = new.strftime("%Y/%m/%d %H:%M:%S")
-                    closed_time_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-                    embed = discord.Embed(
-                        title=f"頻道 「{channel.name}」紀錄",
-                        description=f"顧客：{customers_mention}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
-                        color=THEME_COLOR,
-                    )
-                    new = await archive_channel.send(embed=embed)
-                    new = await new.edit(attachments=[transcript_file])
-
-                msg = await msg.edit(content="生成完成✅傳送回饋單給客戶中...")
-            except subprocess.CalledProcessError as e:
-                # This block will run if the exporter command fails
-                print(f"Error exporting channel {channel.id}: {e}")
-                await msg.edit(content="錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
-                raise Exception("錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
-            except FileNotFoundError:
-                # This block will run if the DiscordChatExporter.Cli executable is not found
-                print("Error: DiscordChatExporter.Cli not found.")
-                await msg.edit(content="錯誤：找不到匯出工具。")
-                raise FileNotFoundError("Error: DiscordChatExporter.Cli not found.")
+            msg = await msg.edit(content="生成完成✅傳送回饋單給客戶中...")
+        except subprocess.CalledProcessError as e:
+            # This block will run if the exporter command fails
+            print(f"Error exporting channel {channel.id}: {e}")
+            await msg.edit(content="錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
+            raise Exception("錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
+        except FileNotFoundError:
+            # This block will run if the DiscordChatExporter.Cli executable is not found
+            print("Error: DiscordChatExporter.Cli not found.")
+            await msg.edit(content="錯誤：找不到匯出工具。")
+            raise FileNotFoundError("Error: DiscordChatExporter.Cli not found.")
 
     async def delete_ticket(self, channel: TextChannel):
         with self.database_manager as db:
