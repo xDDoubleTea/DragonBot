@@ -45,6 +45,34 @@ class DatabaseManager:
         finally:
             return False
 
+    def _build_where_clause(self, criteria: Dict[str, Any]) -> tuple[str, tuple]:
+        """
+        Builds a WHERE clause and a tuple of values from a criteria dict.
+        Handles both single values (=) and lists (IN).
+        """
+        if not criteria:
+            return "", ()
+
+        conditions = []
+        values: list[Any] = []
+        for key, value in criteria.items():
+            if isinstance(value, (list, tuple)):
+                if not value:
+                    # Handle empty list case to prevent SQL errors.
+                    # This condition will always be false, correctly returning no rows.
+                    conditions.append("1 = 0")
+                    continue
+                conditions.append(f'"{key}" IN %s')
+                values.append(
+                    tuple(value)
+                )  # psycopg2 expects a tuple for the IN clause
+            else:
+                conditions.append(f'"{key}" = %s')
+                values.append(value)
+
+        where_clause = "WHERE " + " AND ".join(conditions)
+        return where_clause, tuple(values)
+
     def create_table(self, table_name: str, columns: List[tuple] = []):
         assert self.cursor is not None
         if not columns:
@@ -58,12 +86,8 @@ class DatabaseManager:
         self, table_name: str, criteria: Dict[str, Any] = dict(), fetch_one=False
     ) -> Union[List[RealDictRow], Dict[str, Any], None]:
         assert self.cursor is not None
-        sql = f"SELECT * FROM {table_name}"
-        values = ()
-        if criteria:
-            conditions = " AND ".join([f"{k} = %s" for k in criteria.keys()])
-            sql += f" WHERE {conditions}"
-            values = tuple(criteria.values())
+        where_clause, values = self._build_where_clause(criteria)
+        sql = f"SELECT * FROM {table_name} {where_clause}"
         self.cursor.execute(sql, values)
         if fetch_one:
             return self.cursor.fetchone()
@@ -97,9 +121,7 @@ class DatabaseManager:
             return result[returning_col]
         return None
 
-    def insert_many(
-        self, table_name: str, data: List[Dict[str, Any]], returning_col: str = "id"
-    ):
+    def insert_many(self, table_name: str, data: List[Dict[str, Any]]):
         """
         Inserts multiple rows into a table in a single transaction.
 
@@ -116,14 +138,11 @@ class DatabaseManager:
 
         values_to_insert = [tuple(row[col] for col in columns) for row in data]
 
-        query = f'INSERT INTO {table_name} ({columns_sql}) VALUES ({placeholders_sql}) RETURNING "{returning_col}"'
+        query = f"INSERT INTO {table_name} ({columns_sql}) VALUES ({placeholders_sql})"
 
         try:
             assert self.cursor
             self.cursor.executemany(query, values_to_insert)
-            result = self.cursor.fetchone()
-            if result:
-                return result[returning_col]
         except Exception as e:
             print(f"Error during bulk insert: {e}")
             raise
@@ -143,9 +162,9 @@ class DatabaseManager:
         assert self.cursor is not None
 
         set_clause = ", ".join([f'"{key}" = %s' for key in data.keys()])
-        where_clause = " AND ".join([f'"{key}" = %s' for key in criteria.keys()])
-        sql = f"UPDATE {table_name} SET {set_clause} WHERE {where_clause}"
-        values = tuple(data.values()) + tuple(criteria.values())
+        where_clause, where_values = self._build_where_clause(criteria=criteria)
+        sql = f"UPDATE {table_name} SET {set_clause} {where_clause}"
+        values = tuple(data.values()) + tuple(where_values)
         self.cursor.execute(sql, values)
         return self.cursor.rowcount
 
@@ -162,9 +181,8 @@ class DatabaseManager:
         if not criteria:
             raise ValueError("Criteria must be provided for delete operation.")
         assert self.cursor is not None
-        where_clause = " AND ".join([f'"{key}" = %s' for key in criteria.keys()])
-        sql = f"DELETE FROM {table_name} WHERE {where_clause}"
-        values = tuple(criteria.values())
+        where_clause, values = self._build_where_clause(criteria=criteria)
+        sql = f"DELETE FROM {table_name} {where_clause}"
         self.cursor.execute(sql, values)
         return self.cursor.rowcount
 
