@@ -36,17 +36,6 @@ class DragonBot(commands.Bot):
         )
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)
-        # with open("purchase_msg_info.json", "r") as file:
-        #     data = json.load(file)
-        #
-        # v = OpenButtons(client=self)
-        # if not data:
-        #     cnl = self.get_channel(data["message_cnl_id"])
-        #     assert isinstance(cnl, discord.TextChannel)
-        #     msg = await cnl.fetch_message(data["message_id"])
-        #     return await msg.edit(view=v)
-        # with open("channel_data.json", "r") as file:
-        #     data = json.load(file)
 
     async def setup_hook(self):
         for cog in filter(
