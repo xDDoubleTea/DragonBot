@@ -1,8 +1,9 @@
-*/__pycache__/
+*__pycache__/
 temp.txt
 test.py
 .venv
 .env
 Game
 *.db
-DiscordChatExporter.Cli/
+scripts/
+DiscordChatExporter.Cli.linux-x64.zip

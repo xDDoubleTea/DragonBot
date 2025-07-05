@@ -1,4 +1,5 @@
 discord.py
+PyYAML
 pytz
 numpy
 requests
@@ -6,3 +7,4 @@ bs4
 python-dotenv
 pytest
 pytest-asyncio
+psycopg2-binary
