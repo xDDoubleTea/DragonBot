@@ -9,7 +9,7 @@ from config.constants import (
     cmd_channel_id,
 )
 from config.models import CloseMessageType
-from core.exceptions import ChannelNotTicket, NoParticipants, PanelUnique
+from core.exceptions import ChannelNotTicket, NoParticipants
 from core.ticket_manager import TicketManager
 from utils.embed_utils import create_themed_embed
 from view.ticket_views import (
@@ -30,7 +30,9 @@ class tickets(Cog):
     @Cog.listener(name="on_ready")
     async def on_ready(self):
         with self.ticket_manager.database_manager as db:
-            all_panels = db.select(table_name="ticket_panels")
+            all_panels = db.select(
+                table_name=self.ticket_manager.ticket_panels_table_name
+            )
             all_tickets = db.select(table_name="tickets")
         print("Restoring ticket panels....")
         if not all_panels:
@@ -71,6 +73,7 @@ class tickets(Cog):
                     print(
                         f"An error occurred while re-attaching view for guild {guild_id}: {e}"
                     )
+        print("Done!")
         print("Restoring all close buttons...")
         if not all_tickets:
             print("No tickets found in database, skipping...")
@@ -114,6 +117,7 @@ class tickets(Cog):
             for ticket_id in deleted_tickets_id:
                 with self.ticket_manager.database_manager as db:
                     db.delete(table_name="tickets", criteria={"id": ticket_id})
+        print("Done!")
 
     @Cog.listener(name="on_guild_channel_delete")
     async def on_guild_channel_delete(self, channel):
@@ -121,13 +125,13 @@ class tickets(Cog):
             return
         with self.ticket_manager.database_manager as db:
             delete_cnl = db.select(
-                table_name="ticket_panels",
+                table_name=self.ticket_manager.ticket_panels_table_name,
                 criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
                 fetch_one=True,
             )
             if delete_cnl:
                 db.delete(
-                    table_name="ticket_panels",
+                    table_name=self.ticket_manager.ticket_panels_table_name,
                     criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
                 )
                 assert isinstance(delete_cnl, dict)
@@ -140,7 +144,8 @@ class tickets(Cog):
         if message.id in self.panel_message_ids:
             with self.ticket_manager.database_manager as db:
                 db.delete(
-                    table_name="ticket_panels", criteria={"message_id": message.id}
+                    table_name=self.ticket_manager.ticket_panels_table_name,
+                    criteria={"message_id": message.id},
                 )
 
             self.panel_message_ids.remove(message.id)
@@ -215,7 +220,7 @@ class tickets(Cog):
             assert isinstance(cmd_channel, TextChannel)
             with self.ticket_manager.database_manager as db:
                 panel = db.select(
-                    table_name="ticket_panels",
+                    table_name=self.ticket_manager.ticket_panels_table_name,
                     criteria={"guild_id": interaction.guild.id},
                     fetch_one=True,
                 )
@@ -244,7 +249,7 @@ class tickets(Cog):
                 )
                 msg = await interaction.original_response()
                 db.insert(
-                    table_name="ticket_panels",
+                    table_name=self.ticket_manager.ticket_panels_table_name,
                     data={
                         "guild_id": interaction.guild_id,
                         "channel_id": interaction.channel_id,

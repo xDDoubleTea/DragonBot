@@ -12,6 +12,7 @@ from config import (
     MY_GUILD,
 )
 from core.ticket_manager import TicketManager
+from core.keyword_manager import KeywordManager
 from db.database_manager import DatabaseManager
 
 
@@ -28,6 +29,9 @@ class DragonBot(commands.Bot):
         assert db_url is not None
         self.db_manager = DatabaseManager(database_url=db_url)
         self.ticket_manager = TicketManager(bot=self, database_manager=self.db_manager)
+        self.keyword_manager = KeywordManager(
+            bot=self, database_manager=self.db_manager
+        )
 
     async def on_ready(self):
         print(f"{self.user} is now online!")

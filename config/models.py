@@ -1,7 +1,8 @@
-from enum import IntEnum
+from enum import IntEnum, StrEnum
 from dataclasses import dataclass
 
-__all__ = ["TicketStatus", "Ticket", "CloseMessageType", "KeywordType"]
+
+__all__ = ["TicketStatus", "Ticket", "CloseMessageType", "KeywordType", "TicketType"]
 
 
 class TicketStatus(IntEnum):
@@ -25,13 +26,33 @@ class CloseMessageType(IntEnum):
     AFTER_CLOSE = 2
 
 
-class KeywordType(IntEnum):
+class KeywordType(StrEnum):
     """
     Represents the type of a keyword.
     """
 
-    MATCH_START = 0
-    IS_SUBSTR = 1
+    MATCH_START = "句首"
+    IS_SUBSTR = "句中"
+
+
+class TicketType(StrEnum):
+    """
+    Represents the type of a ticket.
+    """
+
+    PURCHASE = "代購"
+    GUILD = "群組"
+    OTHERS = "其他"
+
+
+@dataclass
+class Keyword:
+    """Represents a row in the keywords table"""
+
+    word: str
+    response: str
+    kw_type: KeywordType
+    in_ticket_only: bool
 
 
 @dataclass

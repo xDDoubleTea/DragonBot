@@ -1,7 +1,8 @@
+import io
 import discord
 from discord.ext import commands
-from discord import Guild, User, Member, Embed, TextChannel
-from typing import Union, List
+from discord import Guild, User, Member, Embed, TextChannel, Client
+from typing import Union, List, Optional
 from discord.ui import View
 import yaml
 from config.models import CloseMessageType, Ticket, TicketStatus
@@ -22,11 +23,16 @@ from datetime import datetime, timedelta
 import tempfile
 import pathlib
 
+from view.feedback_views import FeedBackSystem, feedbackEmbed
+
 
 class TicketManager:
     def __init__(self, bot: commands.Bot, database_manager: DatabaseManager):
         self.database_manager = database_manager
         self.bot = bot
+        self.ticket_table_name = "tickets"
+        self.ticket_panels_table_name = "ticket_panels"
+        self.ticket_participants_table_name = "ticket_participants"
 
     def get_business_hours_embed(self) -> Embed:
         embed = create_themed_embed(
@@ -52,38 +58,51 @@ class TicketManager:
             return (
                 True
                 if db.select(
-                    table_name="tickets",
+                    table_name=self.ticket_table_name,
                     criteria={"channel_id": channel_id},
                     fetch_one=True,
                 )
                 else False
             )
 
-    async def get_ticket(self, channel_id: int) -> Union[Ticket, None]:
+    async def get_ticket(
+        self, *, ticket_id: Optional[int] = None, channel_id: Optional[int] = None
+    ) -> Union[Ticket, None]:
+        criteria = {
+            "id": ticket_id,
+            "channel_id": channel_id,
+        }
+        provided_criteria = {k: v for k, v in criteria.items() if v is not None}
+
+        if len(provided_criteria) != 1:
+            raise ValueError(
+                "This function must be called with exactly one keyword argument."
+            )
+
         with self.database_manager as db:
-            ticket = db.select(
+            ticket_data = db.select(
                 table_name="tickets",
-                criteria={"channel_id": channel_id},
+                criteria=provided_criteria,
                 fetch_one=True,
             )
-            if not ticket:
+            if not ticket_data:
                 return None
-            assert isinstance(ticket, dict)
+            assert isinstance(ticket_data, dict)
             return Ticket(
-                db_id=ticket["id"],
-                channel_id=channel_id,
-                auto_timeout=ticket["auto_timeout"],
-                timed_out=ticket["timed_out"],
-                close_msg_id=ticket["close_msg_id"],
-                status=TicketStatus(ticket["status"]),
-                guild_id=ticket["guild_id"],
-                close_msg_type=ticket["close_msg_type"],
+                db_id=ticket_data["id"],
+                channel_id=ticket_data["channel_id"],
+                auto_timeout=ticket_data["auto_timeout"],
+                timed_out=ticket_data["timed_out"],
+                close_msg_id=ticket_data["close_msg_id"],
+                status=TicketStatus(ticket_data["status"]),
+                guild_id=ticket_data["guild_id"],
+                close_msg_type=ticket_data["close_msg_type"],
             )
 
     def get_ticket_participants(self, ticket_id: int) -> Union[List[int], None]:
         with self.database_manager as db:
             participants = db.select(
-                table_name="ticket_participants",
+                table_name=self.ticket_participants_table_name,
                 criteria={"ticket_id": ticket_id},
             )
             if not participants:
@@ -117,7 +136,7 @@ class TicketManager:
         with self.database_manager as db:
             try:
                 db.insert(
-                    table_name="ticket_participants",
+                    table_name=self.ticket_participants_table_name,
                     data={"ticket_id": ticket.db_id, "participant_id": participant_id},
                     returning_col="ticket_id",
                 )
@@ -210,7 +229,7 @@ class TicketManager:
                 for participant_id in member_to_add_to_db
             ]
             db.insert_many(
-                table_name="ticket_participants",
+                table_name=self.ticket_participants_table_name,
                 data=data,
             )
         return member_to_add_to_db
@@ -246,7 +265,7 @@ class TicketManager:
 
         with self.database_manager as db:
             db.delete(
-                table_name="ticket_participants",
+                table_name=self.ticket_participants_table_name,
                 criteria={
                     "ticket_id": ticket.db_id,
                     "participant_id": member_to_remove_from_db,
@@ -258,7 +277,7 @@ class TicketManager:
         """Get the close message ID for a given channel ID."""
         with self.database_manager as db:
             result = db.select(
-                table_name="tickets",
+                table_name=self.ticket_table_name,
                 criteria={"channel_id": channel_id},
                 fetch_one=True,
             )
@@ -278,7 +297,7 @@ class TicketManager:
         """Set the close message id and type for a given channel ID."""
         with self.database_manager as db:
             db.update(
-                table_name="tickets",
+                table_name=self.ticket_table_name,
                 data={"close_msg_id": close_msg_id, "close_msg_type": close_msg_type},
                 criteria={"channel_id": channel_id},
             )
@@ -315,7 +334,7 @@ class TicketManager:
         )
         with self.database_manager as db:
             new_ticket_id = db.insert(
-                table_name="tickets",
+                table_name=self.ticket_table_name,
                 data={
                     "channel_id": new_channel.id,
                     "auto_timeout": 48,
@@ -328,7 +347,7 @@ class TicketManager:
             )
             await new_channel.edit(name=f"{ticket_type}-{new_ticket_id}")
             db.insert(
-                table_name="ticket_participants",
+                table_name=self.ticket_participants_table_name,
                 data={"ticket_id": new_ticket_id, "participant_id": user.id},
                 returning_col="ticket_id",
             )
@@ -367,7 +386,7 @@ class TicketManager:
         # Return the full path to the transcript
         return str(exported_files[0])
 
-    async def close_ticket(self, channel: TextChannel):
+    async def close_ticket(self, channel: TextChannel, client: Client):
         ticket = await self.get_ticket(channel_id=channel.id)
         if not ticket:
             raise TicketNotFound
@@ -375,7 +394,7 @@ class TicketManager:
         def _sync_update_and_select():
             with self.database_manager as db:
                 db.update(
-                    table_name="tickets",
+                    table_name=self.ticket_table_name,
                     data={"status": TicketStatus.CLOSED},
                     criteria={"channel_id": channel.id},
                 )
@@ -387,6 +406,7 @@ class TicketManager:
         loop = asyncio.get_running_loop()
         participants_id = await loop.run_in_executor(None, _sync_update_and_select)
         customers_mention = ""
+        customers: List[Union[User, Member]] = []
         assert participants_id and isinstance(participants_id, list)
         cus_num = 0
         for participant_id in participants_id:
@@ -395,6 +415,7 @@ class TicketManager:
             if member:
                 await channel.set_permissions(target=member, read_messages=False)
                 customers_mention += member.mention + ", "
+                customers.append(member)
                 cus_num += 1
             else:
                 print(
@@ -404,31 +425,62 @@ class TicketManager:
         customers_mention = customers_mention.rstrip(", ")
         msg = await channel.send("頻道紀錄檔案生成中...")
         try:
+            transcript_bytes: bytes
             with tempfile.TemporaryDirectory() as temp_dir:
-                transcript_path = await loop.run_in_executor(
+                transcript_path_str = await loop.run_in_executor(
                     None, self._run_archive_exporter_sync, channel.id, temp_dir
                 )
 
-                transcript_file = discord.File(
-                    fp=transcript_path,
-                    filename=f"{channel.name}.html",
-                )
+                transcript_path = pathlib.Path(transcript_path_str)
+                transcript_bytes = transcript_path.read_bytes()
+                filename = transcript_path.name
 
-                archive_channel = self.bot.get_channel(archive_channel_id)
-                assert isinstance(archive_channel, TextChannel)
-                UTC_to_GMT = timedelta(hours=8)
-                new = channel.created_at + UTC_to_GMT
-                created_time_str = new.strftime("%Y/%m/%d %H:%M:%S")
-                closed_time_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
-                embed = discord.Embed(
-                    title=f"頻道 「{channel.name}」紀錄",
-                    description=f"顧客：{customers_mention}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
-                    color=THEME_COLOR,
-                )
-                new = await archive_channel.send(embed=embed)
-                new = await new.edit(attachments=[transcript_file])
+            archive_channel = self.bot.get_channel(archive_channel_id)
+            assert isinstance(archive_channel, TextChannel)
+
+            UTC_to_GMT = timedelta(hours=8)
+            new = channel.created_at + UTC_to_GMT
+            created_time_str = new.strftime("%Y/%m/%d %H:%M:%S")
+            closed_time_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+
+            archive_embed = discord.Embed(
+                title=f"頻道 「{channel.name}」紀錄",
+                description=f"顧客：{customers_mention}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
+                color=THEME_COLOR,
+            )
+
+            transcript_file = discord.File(
+                fp=io.BytesIO(transcript_bytes),
+                filename=f"{filename}.html",
+            )
+            new = await archive_channel.send(embed=archive_embed)
+            new = await new.edit(attachments=[transcript_file])
 
             msg = await msg.edit(content="生成完成✅傳送回饋單給客戶中...")
+            view = FeedBackSystem()
+            feedback_embed = feedbackEmbed(channel=channel, client=client)
+            for customer in customers:
+                if customer:
+                    try:
+                        customer_transcript_file = discord.File(
+                            io.BytesIO(transcript_bytes), filename=filename
+                        )
+                        await customer.send(
+                            content="此為對話記錄檔案：",
+                            embed=archive_embed,
+                            file=customer_transcript_file,
+                        )
+                        await customer.send(
+                            content="說明：點選星數來代表今天服務的滿意度，而下拉式選單可選擇評語(若誤按或未使用服務請不用評價)",
+                            embed=feedback_embed,
+                            view=view,
+                        )
+                    except discord.errors.Forbidden:
+                        print(
+                            f"User {customer.name} does not allow private messages, skipping..."
+                        )
+                    except Exception as e:
+                        print(f"Error: {e}")
         except subprocess.CalledProcessError as e:
             # This block will run if the exporter command fails
             print(f"Error exporting channel {channel.id}: {e}")
@@ -442,7 +494,9 @@ class TicketManager:
 
     async def delete_ticket(self, channel: TextChannel):
         with self.database_manager as db:
-            db.delete(table_name="tickets", criteria={"channel_id": channel.id})
+            db.delete(
+                table_name=self.ticket_table_name, criteria={"channel_id": channel.id}
+            )
             await channel.delete()
 
     async def reopen_ticket(self, channel: TextChannel):
