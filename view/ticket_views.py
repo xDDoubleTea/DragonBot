@@ -22,6 +22,14 @@ class QuestionModal(Modal):
                 required=False,
             )
             self.add_item(self.order_id_input)
+        elif self.ticket_type == TicketType.GUILD:
+            self.guild_problem_input = TextInput(
+                label="群組問題分類（選填，若有特定群組問題，可以填入）",
+                style=discord.TextStyle.short,
+                placeholder="例如：領獎/身分組/檢舉/問題回報...等",
+                required=False,
+            )
+            self.add_item(self.guild_problem_input)
         self.description_input = TextInput(
             label="問題描述",
             style=discord.TextStyle.paragraph,
@@ -58,6 +66,12 @@ class QuestionModal(Modal):
             if self.ticket_type == TicketType.PURCHASE and self.order_id_input.value:
                 await new_channel.send(
                     content=f"**訂單編號**：`{self.order_id_input.value}`"
+                )
+            elif (
+                self.ticket_type == TicketType.GUILD and self.guild_problem_input.value
+            ):
+                await new_channel.send(
+                    content=f"**群組問題分類**：`{self.guild_problem_input.value}`"
                 )
 
             # 3. Send a final, persistent confirmation to the user.
