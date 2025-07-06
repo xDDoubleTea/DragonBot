@@ -1,33 +1,29 @@
 from discord import ButtonStyle, Interaction, TextStyle
 from discord.ui import Modal, TextInput, View, button, Button
 
-from config.models import KeywordType
+from config.models import Keyword, KeywordType
 from core.keyword_manager import KeywordManager
 
 
 class KeywordChangeModal(Modal):
-    def __init__(
-        self,
-        keyword: str,
-        response: str,
-        kw_type: KeywordType,
-        in_ticket_only: bool,
-        keyword_manager: KeywordManager,
-    ):
+    def __init__(self, keyword: Keyword, keyword_manager: KeywordManager):
         super().__init__(
-            title=f"確認變更關鍵字{keyword}之設定（輸入區顯示的為新的設定）"
+            title=f"確認變更關鍵字「{keyword.trigger}」之設定（輸入區顯示的為新的設定）"
         )
-        self.keyword = keyword
-        self.response = response
-        self.kw_type = kw_type
-        self.in_ticket_only = in_ticket_only
+        self.trigger = keyword.trigger
+        self.response = keyword.response
+        self.kw_type = keyword.kw_type
+        self.in_ticket_only = keyword.in_ticket_only
+        self.guild_id = keyword.guild_id
+        self.channel_ids = keyword.allowed_channel_ids
         self.keyword_manager = keyword_manager
-        self.keyword_input = TextInput(
+        self.customer_mention = keyword.customer_mention
+        self.trigger_input = TextInput(
             label="關鍵字",
             style=TextStyle.short,
             max_length=50,
             required=False,
-            placeholder=self.keyword,
+            placeholder=self.trigger,
         )
         self.response_input = TextInput(
             label="回覆",
@@ -39,7 +35,7 @@ class KeywordChangeModal(Modal):
         self.type_input = TextInput(
             label="關鍵字類型(句首或句中)",
             style=TextStyle.short,
-            placeholder=kw_type.value,
+            placeholder=self.kw_type.value,
             required=False,
             min_length=2,
             max_length=2,
@@ -49,9 +45,9 @@ class KeywordChangeModal(Modal):
             style=TextStyle.short,
             max_length=1,
             required=False,
-            placeholder="是" if in_ticket_only else "否",
+            placeholder="是" if self.in_ticket_only else "否",
         )
-        self.add_item(self.keyword_input)
+        self.add_item(self.trigger_input)
         self.add_item(self.response_input)
         self.add_item(self.type_input)
         self.add_item(self.in_ticket_only_input)
@@ -63,16 +59,10 @@ class KeywordChangeModal(Modal):
 class KeywordChange(View):
     def __init__(
         self,
-        keyword: str,
-        response: str,
-        kw_type: KeywordType,
-        in_ticket_only: bool,
+        keyword: Keyword,
         keyword_manager: KeywordManager,
     ):
         self.keyword = keyword
-        self.response = response
-        self.kw_type = kw_type
-        self.in_ticket_only = in_ticket_only
         self.keyword_manager = keyword_manager
         super().__init__(timeout=None)
 
@@ -81,9 +71,6 @@ class KeywordChange(View):
         await interaction.response.send_modal(
             KeywordChangeModal(
                 keyword=self.keyword,
-                response=self.response,
-                kw_type=self.kw_type,
-                in_ticket_only=self.in_ticket_only,
                 keyword_manager=self.keyword_manager,
             )
         )

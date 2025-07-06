@@ -1,5 +1,6 @@
 from enum import IntEnum, StrEnum
-from dataclasses import dataclass
+from typing import List
+from dataclasses import dataclass, field
 
 
 __all__ = ["TicketStatus", "Ticket", "CloseMessageType", "KeywordType", "TicketType"]
@@ -49,10 +50,27 @@ class TicketType(StrEnum):
 class Keyword:
     """Represents a row in the keywords table"""
 
-    word: str
+    id: int
+    trigger: str
     response: str
     kw_type: KeywordType
-    in_ticket_only: bool
+    guild_id: int
+    customer_mention: bool = False
+    in_ticket_only: bool = True
+    allowed_channel_ids: List[int] = field(default_factory=list)
+
+    def is_allowed_in(self, channel_id: int, is_ticket_channel: bool) -> bool:
+        """
+        Checks if the keyword is allowed to trigger in a given channel context.
+        """
+        if self.in_ticket_only and not is_ticket_channel:
+            return False
+        # If allowed_channel_ids is empty, it means it's allowed in all channels
+        # that satisfy the ticket-only rule.
+        if not self.allowed_channel_ids:
+            return True
+
+        return channel_id in self.allowed_channel_ids
 
 
 @dataclass
