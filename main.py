@@ -13,7 +13,7 @@ from config import (
 )
 from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
-from db.database_manager import DatabaseManager
+from db.database_manager import DatabaseManager, AsyncDatabaseManager
 
 
 class DragonBot(commands.Bot):
@@ -28,9 +28,10 @@ class DragonBot(commands.Bot):
         )
         assert db_url is not None
         self.db_manager = DatabaseManager(database_url=db_url)
+        self.async_db_manager = AsyncDatabaseManager(db_url=db_url)
         self.ticket_manager = TicketManager(bot=self, database_manager=self.db_manager)
         self.keyword_manager = KeywordManager(
-            bot=self, database_manager=self.db_manager
+            bot=self, database_manager=self.async_db_manager
         )
 
     async def on_ready(self):
@@ -42,11 +43,17 @@ class DragonBot(commands.Bot):
         await self.tree.sync(guild=MY_GUILD)
 
     async def setup_hook(self):
+        await self.async_db_manager.connect()
+        await self.keyword_manager.initialize_cache()
         for cog in filter(
             lambda file: file.endswith(".py"),
             os.listdir("./cogs"),
         ):
             await self.load_extension(f"cogs.{cog[:-3]}")
+
+    async def close(self):
+        await self.async_db_manager.close()
+        await super().close()
 
 
 def main():
