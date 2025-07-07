@@ -23,6 +23,9 @@ class keyword(Cog):
         self.ticket_manger = ticket_manager
 
     async def _get_response(self, keyword: Keyword, channel_id: int) -> str:
+        """
+        Private helper function to correctly generate the response.
+        """
         resp = keyword.response
         ticket_check = await self.ticket_manger.get_ticket(channel_id=channel_id)
         if keyword.mention_participants and ticket_check:
@@ -34,6 +37,9 @@ class keyword(Cog):
         return resp
 
     async def auto_complete_keyword(self, interaction: Interaction, current: str):
+        """
+        Auto complete function of the trigger parameter in the slash commands to improve UX
+        """
         if not interaction.guild:
             return []
         keywords = self.keyword_manager.get_all_keywords_in_guild(interaction.guild.id)
@@ -100,6 +106,10 @@ class keyword(Cog):
         in_ticket_only: bool = True,
         mention_participants: bool = True,
     ):
+        """
+        App command that adds a keyword to the cache and the database, sends modal for editing if the keyword already exists.
+        Do not directly call this function.
+        """
         if not interaction.guild:
             return await interaction.response.send_message("此指令只能在伺服器中使用！")
         kw_data = self.keyword_manager.get_keyword_by_trigger(
