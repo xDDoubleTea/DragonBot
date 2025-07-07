@@ -44,7 +44,9 @@ class DragonBot(commands.Bot):
 
     async def setup_hook(self):
         await self.async_db_manager.connect()
+        print("Connected to the database")
         await self.keyword_manager.initialize_cache()
+        print("Keyword cache initialized")
         for cog in filter(
             lambda file: file.endswith(".py"),
             os.listdir("./cogs"),

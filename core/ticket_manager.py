@@ -110,6 +110,27 @@ class TicketManager:
             assert isinstance(participants, list)
             return [p["participant_id"] for p in participants]
 
+    async def get_ticket_participants_member(
+        self, ticket_id: int
+    ) -> Union[List[Member], None]:
+        participants_ids = self.get_ticket_participants(ticket_id=ticket_id)
+        if not participants_ids:
+            return None
+        ticket_cnl = await self.get_ticket(ticket_id=ticket_id)
+        if not ticket_cnl:
+            return None
+        cnl = self.bot.get_channel(ticket_cnl.channel_id)
+        if not cnl:
+            return None
+        assert isinstance(cnl, TextChannel)
+        members = []
+        for part_id in participants_ids:
+            member = cnl.guild.get_member(part_id)
+            if not member:
+                continue
+            members.append(member)
+        return members
+
     async def add_ticket_participant(
         self, channel_id: int, participant_id: int
     ) -> Union[List[int], None]:

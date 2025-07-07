@@ -1,5 +1,5 @@
 from enum import IntEnum, StrEnum
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass, field
 
 
@@ -25,6 +25,30 @@ class CloseMessageType(IntEnum):
     CLOSE_TOGGLE = 0
     CLOSE = 1
     AFTER_CLOSE = 2
+
+
+def BooleanToStr(value: bool) -> str:
+    """
+    Converts a boolean value to a string representation.
+    """
+    return "是" if value else "否"
+
+
+def StrToBoolean(value: str) -> Optional[bool]:
+    """
+    Converts a string representation of a boolean to a boolean value.
+    Returns None if the value is not "是" or "否".
+    """
+    return True if value == "是" else False if value == "否" else None
+
+
+class AddRemove(StrEnum):
+    """
+    Represents the action of adding or removing a keyword.
+    """
+
+    ADD = "加入"
+    REMOVE = "移除"
 
 
 class KeywordType(StrEnum):
@@ -55,7 +79,7 @@ class Keyword:
     response: str
     kw_type: KeywordType
     guild_id: int
-    customer_mention: bool = False
+    mention_participants: bool = False
     in_ticket_only: bool = True
     allowed_channel_ids: List[int] = field(default_factory=list)
 
@@ -70,7 +94,7 @@ class Keyword:
         if not self.allowed_channel_ids:
             return True
 
-        return channel_id in self.allowed_channel_ids
+        return channel_id in self.allowed_channel_ids or is_ticket_channel
 
 
 @dataclass
