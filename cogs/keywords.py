@@ -1,7 +1,7 @@
 import discord
 from discord import TextChannel, Interaction, app_commands, Message
 from discord.ext import commands
-from typing import Literal, Optional, List
+from typing import Literal, Optional
 from discord.ext.commands import Cog
 
 from config.models import AddRemove, Keyword, KeywordType
