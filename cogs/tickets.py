@@ -1,14 +1,18 @@
-from discord import Interaction, TextChannel, User
+from discord import Interaction, Member, TextChannel, User, Message
 import discord
+from discord.app_commands import MissingRole
+from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
 from discord.ext.commands import Cog
 from discord.ext.commands.hybrid import app_commands
+from config.canned_response import ReplyKeys
 from config.constants import (
     ticket_system_main_message,
     cus_service_role_id,
     cmd_channel_id,
 )
-from config.models import CloseMessageType
+from config.models import CloseMessageType, TicketStatus
+from config.canned_response import CANNED_RESPONSES
 from core.exceptions import ChannelNotTicket, NoParticipants
 from core.ticket_manager import TicketManager
 from utils.embed_utils import create_themed_embed
@@ -19,6 +23,7 @@ from view.ticket_views import (
     TicketCreationView,
 )
 from typing import List, Union
+from utils.transformers import CannedResponseTransformer
 
 
 class tickets(Cog):
@@ -88,25 +93,39 @@ class tickets(Cog):
             ] = [TicketCloseToggleView, TicketCloseView, TicketAfterClose]
             deleted_tickets_id = []
             for ticket in all_tickets:
-                close_msg_id = ticket["close_msg_id"]
-                close_msg_type = ticket["close_msg_type"]
-                guild_id = ticket["guild_id"]
+                ticket = await self.ticket_manager.get_ticket(ticket_id=ticket["id"])
+                assert ticket
+                close_msg_id = ticket.close_msg_id
+                close_msg_type = ticket.close_msg_type
+                guild_id = ticket.guild_id
                 guild = self.bot.get_guild(guild_id)
                 if not guild:
-                    continue
-                channel_id = ticket["channel_id"]
+                    try:
+                        guild = await self.bot.fetch_guild(guild_id)
+                    except discord.errors.NotFound:
+                        print(
+                            f"Could not find the guild with guild id {guild_id}, skipping..."
+                        )
+                        continue
+                channel_id = ticket.channel_id
                 channel = guild.get_channel(channel_id)
                 if not channel or not isinstance(channel, TextChannel):
                     # The channel has been deleted, so we can remove the ticket from the database.
-                    deleted_tickets_id.append(ticket["id"])
+                    deleted_tickets_id.append(ticket.db_id)
                     continue
                 try:
                     message = await channel.fetch_message(close_msg_id)
-                    print(f"Restoring close buttons in ticket with id {ticket['id']}")
+                    print(f"Restoring close buttons in ticket with id {ticket.db_id}")
                     view = close_view[CloseMessageType(close_msg_type)](
                         ticket_manager=self.ticket_manager
                     )
                     await message.edit(view=view)
+                    print(f"Setting channel name for ticket with id {ticket.db_id}")
+                    await self.ticket_manager.set_ticket_status(
+                        ticket=ticket,
+                        new_status=ticket.status,
+                        ticket_channel=channel,
+                    )
                 except discord.errors.NotFound:
                     print(
                         f"Could not find the closing message with id {close_msg_id}. Resending the close button message."
@@ -118,6 +137,29 @@ class tickets(Cog):
                 with self.ticket_manager.database_manager as db:
                     db.delete(table_name="tickets", criteria={"id": ticket_id})
         print("Done!")
+
+    @Cog.listener(name="on_message")
+    async def on_message(self, message: Message):
+        if message.author.bot:
+            return
+        ticket = await self.ticket_manager.get_ticket(channel_id=message.channel.id)
+        if not ticket:
+            return
+
+        assert (
+            message.guild
+            and isinstance(message.channel, TextChannel)
+            and isinstance(message.author, Member)
+        )
+        # Because ticket is a TextChannel in a Guild, AssertionError won't be raised
+        cus_service_role = message.guild.get_role(cus_service_role_id)
+        if (
+            ticket.status == TicketStatus.OPEN
+            and cus_service_role in message.author.roles
+        ):
+            await self.ticket_manager.set_ticket_status(
+                ticket=ticket, new_status=TicketStatus.IN_PROGRESS
+            )
 
     @Cog.listener(name="on_guild_channel_delete")
     async def on_guild_channel_delete(self, channel):
@@ -228,10 +270,16 @@ class tickets(Cog):
                     assert isinstance(panel, dict)
                     panel_cnl = interaction.guild.get_channel(panel["channel_id"])
                     assert isinstance(panel_cnl, TextChannel)
-                    panel_msg = await panel_cnl.fetch_message(panel["message_id"])
-                    return await interaction.followup.send(
-                        content=f"There should only exist one open message for each guild. The url of the open message in your guild is {panel_msg.jump_url}"
-                    )
+                    try:
+                        panel_msg = await panel_cnl.fetch_message(panel["message_id"])
+                        return await interaction.followup.send(
+                            content=f"There should only exist one open message for each guild. The url of the open message in your guild is {panel_msg.jump_url}"
+                        )
+                    except discord.errors.NotFound:
+                        db.delete(
+                            table_name=self.ticket_manager.ticket_panels_table_name,
+                            criteria={"message_id": panel["message_id"]},
+                        )
 
                 view = TicketCreationView(ticket_manager=self.ticket_manager)
                 embed = create_themed_embed(
@@ -325,6 +373,61 @@ class tickets(Cog):
         except NoParticipants:
             return await interaction.response.send_message(
                 content="此客服頻道已經沒有客戶了，你在幹麻？？？", ephemeral=True
+            )
+
+    @app_commands.command(name="r", description="回覆指令(只有客服人員能夠使用)")
+    @app_commands.checks.has_role(cus_service_role_id)
+    async def r(
+        self,
+        interaction: Interaction,
+        reply: app_commands.Transform[ReplyKeys, CannedResponseTransformer(ReplyKeys)],
+    ):
+        # check if in channel
+
+        if not interaction.channel or not isinstance(interaction.channel, TextChannel):
+            # The ticket channel must be a TextChannel because that's how it's coded.
+            return await interaction.response.send_message(
+                "這裡不是客服頻道！", ephemeral=True
+            )
+
+        ticket = await self.ticket_manager.get_ticket(channel_id=interaction.channel.id)
+        if not ticket:
+            return await interaction.response.send_message(
+                "這裡不是客服頻道！", ephemeral=True
+            )
+        # get customer id & tag stuff
+        response_data = CANNED_RESPONSES.get(reply)
+        if not response_data:
+            return await interaction.response.send_message(
+                "錯誤：找不到該回覆訊息。", ephemeral=True
+            )
+        final_response = response_data.text
+        if response_data.mention_user:
+            participants = await self.ticket_manager.get_ticket_participants_member(
+                ticket_id=ticket.db_id
+            )
+            if not participants:
+                return await interaction.response.send_message(
+                    "這個客服頻道沒有客戶，非常詭異", ephemeral=True
+                )
+            final_response = f"""{", ".join(map(lambda participant: participant.mention, participants))} 
+{final_response}"""
+
+        await interaction.channel.send(final_response)
+
+        if reply in {ReplyKeys.CLOSE_PROMPT, ReplyKeys.DONE_PROCESS}:
+            await self.ticket_manager.set_ticket_status(
+                ticket=ticket, new_status=TicketStatus.RESOLVED
+            )
+        return await interaction.response.send_message(
+            "傳送完成", delete_after=3, ephemeral=True
+        )
+
+    @r.error
+    async def r_error(self, interaction: Interaction, error: AppCommandError):
+        if isinstance(error, MissingRole):
+            return await interaction.response.send_message(
+                "只有客服人員能夠使用此指令！", ephemeral=True
             )
 
 

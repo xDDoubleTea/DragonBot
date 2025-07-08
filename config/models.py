@@ -31,6 +31,14 @@ class TicketStatus(IntEnum):
     CLOSED = 3
 
 
+ticket_status_name_chinese = {
+    TicketStatus.OPEN: "待處理",
+    TicketStatus.IN_PROGRESS: "處理中",
+    TicketStatus.RESOLVED: "處理完畢",
+    TicketStatus.CLOSED: "已關閉",
+}
+
+
 class CloseMessageType(IntEnum):
     """
     Represents the close buttons type attached to the close message.
@@ -153,5 +161,6 @@ class Ticket:
     timed_out: int
     close_msg_id: int
     status: TicketStatus
+    ticket_type: TicketType
     guild_id: int
     close_msg_type: CloseMessageType
