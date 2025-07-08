@@ -5,7 +5,13 @@ from discord import Guild, User, Member, Embed, TextChannel, Client
 from typing import Union, List, Optional
 from discord.ui import View
 import yaml
-from config.models import CloseMessageType, Ticket, TicketStatus
+from config.models import (
+    CloseMessageType,
+    Ticket,
+    TicketStatus,
+    TicketType,
+    ticket_status_name_chinese,
+)
 from db.database_manager import DatabaseManager
 from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFound
 from config.constants import (
@@ -95,6 +101,7 @@ class TicketManager:
                 timed_out=ticket_data["timed_out"],
                 close_msg_id=ticket_data["close_msg_id"],
                 status=TicketStatus(ticket_data["status"]),
+                ticket_type=TicketType(ticket_data["ticket_type"]),
                 guild_id=ticket_data["guild_id"],
                 close_msg_type=ticket_data["close_msg_type"],
             )
@@ -362,11 +369,15 @@ class TicketManager:
                     "timed_out": 0,
                     "close_msg_id": msg.id,
                     "status": TicketStatus.OPEN,
+                    "ticket_type": TicketType(ticket_type),
                     "guild_id": guild.id,
                     "close_msg_type": CloseMessageType.CLOSE_TOGGLE,
                 },
             )
-            await new_channel.edit(name=f"{ticket_type}-{new_ticket_id}")
+            # We just set it manually since creating a Ticket object here is meaningless.
+            await new_channel.edit(
+                name=f"{ticket_type}-{new_ticket_id:04d}-{ticket_status_name_chinese.get(TicketStatus.OPEN)}"
+            )
             db.insert(
                 table_name=self.ticket_participants_table_name,
                 data={"ticket_id": new_ticket_id, "participant_id": user.id},
@@ -411,6 +422,9 @@ class TicketManager:
         ticket = await self.get_ticket(channel_id=channel.id)
         if not ticket:
             raise TicketNotFound
+        await self.set_ticket_status(
+            ticket=ticket, new_status=TicketStatus.CLOSED, ticket_channel=channel
+        )
 
         def _sync_update_and_select():
             with self.database_manager as db:
@@ -524,6 +538,9 @@ class TicketManager:
         ticket = await self.get_ticket(channel_id=channel.id)
         if not ticket:
             raise ChannelNotTicket
+        await self.set_ticket_status(
+            ticket=ticket, new_status=TicketStatus.OPEN, ticket_channel=channel
+        )
         participants_id = self.get_ticket_participants(ticket_id=ticket.db_id)
         assert participants_id
         await self._update_participants_permissions(
@@ -531,4 +548,65 @@ class TicketManager:
             participants_id=participants_id,
             allow_read=True,
             current_participants=set(),
+        )
+
+    async def set_ticket_status(
+        self,
+        ticket: Ticket,
+        new_status: TicketStatus,
+        guild: Optional[Guild] = None,
+        ticket_channel: Optional[TextChannel] = None,
+    ):
+        if ticket.status == new_status:
+            return
+        ticket.status = new_status
+        with self.database_manager as db:
+            db.update(
+                table_name=self.ticket_table_name,
+                data={"status": new_status.value},
+                criteria={"id": ticket.db_id},
+            )
+        await self.set_ticket_channel_name(
+            ticket=ticket, guild=guild, ticket_channel=ticket_channel
+        )
+
+    async def set_ticket_channel_name(
+        self,
+        ticket: Ticket,
+        guild: Optional[Guild] = None,
+        ticket_channel: Optional[TextChannel] = None,
+    ):
+        """
+        This fucntion sets the ticket's channel name with format : {ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}, where status_name = ticket_status_name_chinese.get(ticket.status).
+        Args:
+            ticket (Ticket): The ticket to be changed.
+            guild (Optional[Guild]): The guild that the ticket is in.
+            ticket_channel (Optional[TextChannel]): The textchannel object of the ticket.
+
+        Notes:
+            If guild or ticket_channel has a mismatch with the provided ticket infomation, we will try fix that.
+
+        Raises:
+            discord.errors.NotFound, if the channel or the guild (the latter is unlikely) was deleted.
+        Returns:
+            None, if everything works fine.
+        """
+        if not ticket_channel or ticket_channel.id != ticket.channel_id:
+            # This means a mismatch or ticket_channel is not given, so we have to get it ourselves.
+            # We do the computation if guild is not given or the guild is given but is mismatched
+            if not guild or (guild and guild.id != ticket.guild_id):
+                guild = self.bot.get_guild(ticket.guild_id)
+                if not guild:
+                    guild = await self.bot.fetch_guild(ticket.guild_id)
+
+            ticket_cnl_temp = guild.get_channel(ticket.channel_id)
+            if not ticket_channel:
+                ticket_cnl_temp = await guild.fetch_channel(ticket.channel_id)
+            assert isinstance(ticket_cnl_temp, TextChannel)
+            ticket_channel = ticket_cnl_temp
+
+        # We pray for cache hit everytime.
+        status_name = ticket_status_name_chinese.get(ticket.status)
+        await ticket_channel.edit(
+            name=f"{ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}"
         )
