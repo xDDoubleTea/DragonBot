@@ -1,14 +1,30 @@
 import discord
-from discord import TextChannel, Interaction, app_commands, Message
+from discord import (
+    DMChannel,
+    TextChannel,
+    Interaction,
+    app_commands,
+    Message,
+    Embed,
+)
 from discord.ext import commands
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from discord.ext.commands import Cog
 
-from config.models import AddRemove, Keyword, KeywordType
+from config.constants import THEME_COLOR
+from config.models import (
+    AddRemove,
+    BooleanToStr,
+    Keyword,
+    KeywordType,
+    KeywordPaginationMetaData,
+)
 from core.keyword_manager import KeywordManager
 from core.ticket_manager import TicketManager
 from main import DragonBot
+from utils import embed_utils
 from view.keyword_views import KeywordChange, KeywordChangeModal
+from view.pagination_view import KeywordPaginationView
 
 
 class keyword(Cog):
@@ -256,13 +272,58 @@ class keyword(Cog):
             )
         )
 
+    def format_keyword_embed(
+        self, keyword_metadata: KeywordPaginationMetaData, keywords_list: List[Keyword]
+    ) -> Embed:
+        embed = embed_utils.create_themed_embed(
+            title="關鍵字列表",
+            description=f"{keyword_metadata.guild_name}的關鍵字列表",
+            client=keyword_metadata.client,
+        )
+        for keyword in keywords_list:
+            embed.add_field(
+                name=f"**關鍵字**：{keyword.trigger}",
+                value=f"""
+                回覆：{keyword.response}，類型：{keyword.kw_type.value}，只在客服頻道中觸發：{BooleanToStr(keyword.in_ticket_only)}，在客服頻道中tag客戶：{BooleanToStr(keyword.mention_participants)}
+                可觸發頻道：{", ".join(map(lambda cnl: cnl.mention, keyword_metadata.keyword_channel_obj.get(keyword.trigger, []))) if not keyword.in_ticket_only else "只在客服頻道中觸發"}""",
+                inline=False,
+            )
+        return embed
+
     @app_commands.command(name="keyword_list", description="關鍵字列表")
     @app_commands.checks.has_permissions(administrator=True)
     async def keyword_list(self, interaction: Interaction):
         if not interaction.guild:
             return await interaction.response.send_message("此指令只能在伺服器中使用！")
         kw_dict = self.keyword_manager.get_all_keywords_in_guild(interaction.guild.id)
-        await interaction.response.send_message(kw_dict)
+        guild = interaction.guild
+        channel = interaction.channel
+        user = interaction.user
+        if not channel or isinstance(channel, DMChannel):
+            return await interaction.response.send_message("此指令只能在伺服器中使用！")
+        keyword_metadata = KeywordPaginationMetaData(
+            guild_name=guild.name,
+            guild_id=guild.id,
+            channel_name=channel.name or "No name",
+            channel_id=channel.id,
+            user_name=user.name,
+            user_id=user.id,
+            client=interaction.client,
+            theme_color=THEME_COLOR,
+            guild=guild,
+            keyword_channel_obj={
+                trigger: self.keyword_manager.get_keyword_channels_obj(
+                    trigger=trigger, guild=guild
+                )
+                for trigger in kw_dict.keys()
+            },
+        )
+        view = KeywordPaginationView(
+            metadata=keyword_metadata,
+            data=[kw for kw in kw_dict.values()],
+            format_page=self.format_keyword_embed,
+        )
+        await view.send_initial_message(interaction)
 
     @app_commands.command(
         name="keyword_edit_channel", description="編輯關鍵字可觸發頻道"

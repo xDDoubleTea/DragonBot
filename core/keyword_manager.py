@@ -1,4 +1,5 @@
 from typing import List, Optional, Union, Dict, Any
+from discord import Guild, TextChannel
 from discord.ext import commands
 from config.models import Keyword, KeywordType
 from db.database_manager import AsyncDatabaseManager
@@ -210,6 +211,25 @@ class KeywordManager:
         if not keyword:
             return []
         return keyword.allowed_channel_ids
+
+    def get_keyword_channels_obj(self, trigger: str, guild: Guild) -> List[TextChannel]:
+        """
+        Retrieves the allowed channels for a keyword.
+        Args:
+            trigger: The keyword trigger to fetch channels for.
+            guild_id: The guild this keyword belongs to.
+        Returns:
+            List of channel of type discord.TextChannel where this keyword is allowed.
+        """
+        keyword = self.get_keyword_by_trigger(trigger, guild_id=guild.id)
+        if not keyword:
+            return []
+        channels = []
+        for channel_id in keyword.allowed_channel_ids:
+            channel = guild.get_channel(channel_id)
+            if channel:
+                channels.append(channel)
+        return channels
 
     async def remove_keyword_channels(
         self, trigger: str, channel_ids: List[int], guild_id: int
