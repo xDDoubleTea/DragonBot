@@ -6,6 +6,7 @@ __all__ = [
     "bot_token",
     "pre",
     "eng_to_chinese",
+    "currency_information_url",
     "My_user_id",
     "version",
     "MyDiscordID",
@@ -91,6 +92,8 @@ MY_GUILD = (
 )
 # guild dragon 403844884374487040
 # test guild 1039906085626196079
+
+currency_information_url = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
 
 NOT_REQUESTABLE_ROLES_ID = [
     584419521692172316,
