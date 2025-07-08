@@ -15,6 +15,7 @@ __all__ = [
     "THEME_COLOR",
     "logchannel_id",
     "archive_channel_id",
+    "feedback_channel_id",
     "app_id",
     "MY_GUILD",
     "NOT_REQUESTABLE_ROLES_ID",
@@ -79,6 +80,9 @@ archive_channel_id = 1015983550782263356 if app_mode == "prod" else 139038591881
 app_id = 973570456076558406 if app_mode == "prod" else 865240620233785344
 # In production guild, app_id is 973570456076558406
 # In test guild, app_id is 865240620233785344
+
+feedback_channel_id = 976831519995875338 if app_mode == "prod" else 1390873409143046225
+
 
 MY_GUILD = (
     Object(id=1039906085626196079)
