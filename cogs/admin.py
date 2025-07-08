@@ -1,10 +1,13 @@
 from discord import TextChannel
-import discord
 from discord.ext import commands
 from discord.ext.commands import Context, Cog, ExtensionNotFound
 from discord.ext.commands.core import ExtensionFailed
-from discord.ext.commands.errors import ExtensionAlreadyLoaded, ExtensionNotLoaded
-from discord.state import CategoryChannel
+from discord.ext.commands.errors import (
+    ExtensionAlreadyLoaded,
+    ExtensionNotLoaded,
+    CommandError,
+)
+from utils.checks import is_me_command, IsNotDev
 
 
 class admin(Cog):
@@ -12,7 +15,7 @@ class admin(Cog):
         self.bot = bot
 
     @commands.command(name="load", hidden=True)
-    @commands.has_permissions(administrator=True)
+    @is_me_command()
     async def load(self, ctx: Context, ext_name: str):
         try:
             await self.bot.load_extension("cogs." + ext_name)
@@ -28,7 +31,7 @@ class admin(Cog):
             return None
 
     @commands.command(name="unload", hidden=True)
-    @commands.has_permissions(administrator=True)
+    @is_me_command()
     async def unload(self, ctx: Context, ext_name: str):
         if ext_name == "admin":
             return await ctx.send(
@@ -48,7 +51,7 @@ class admin(Cog):
             return None
 
     @commands.command(name="reload", hidden=True)
-    @commands.has_permissions(administrator=True)
+    @is_me_command()
     async def reload(self, ctx: Context, ext_name: str):
         try:
             await self.bot.reload_extension("cogs." + ext_name)
@@ -62,7 +65,7 @@ class admin(Cog):
             return None
 
     @commands.command(name="ext_list", hidden=True)
-    @commands.has_permissions(administrator=True)
+    @is_me_command()
     async def ext_list(self, ctx: Context):
         await ctx.send("All loaded extensions list:\n")
         return await ctx.send(
@@ -79,6 +82,26 @@ class admin(Cog):
             return
         else:
             return
+
+    @load.error
+    async def load_error(self, ctx: Context, error: CommandError):
+        if isinstance(error, IsNotDev):
+            await ctx.send(error.message)
+
+    @unload.error
+    async def unload_error(self, ctx: Context, error: CommandError):
+        if isinstance(error, IsNotDev):
+            await ctx.send(error.message)
+
+    @reload.error
+    async def reload_error(self, ctx: Context, error: CommandError):
+        if isinstance(error, IsNotDev):
+            await ctx.send(error.message)
+
+    @ext_list.error
+    async def ext_list_error(self, ctx: Context, error: CommandError):
+        if isinstance(error, IsNotDev):
+            await ctx.send(error.message)
 
 
 async def setup(client):
