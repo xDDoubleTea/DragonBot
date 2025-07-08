@@ -2,7 +2,7 @@ from typing import Union
 from discord import Embed, Client
 
 import time
-from datetime import date, datetime
+from datetime import date
 
 from config.constants import THEME_COLOR, My_user_id, default_footer
 

@@ -1,25 +1,43 @@
 import discord
 from discord import Interaction, TextChannel
-from discord.ui import Modal, View, button, Button
+from discord.ui import Modal, View, button, Button, TextInput
 
-from config.models import CloseMessageType
+from config.models import CloseMessageType, TicketType
 from core.ticket_manager import TicketManager
 from config.constants import DS01, DISCORD_EMOJI
 from core.exceptions import ChannelCreationFail
 
 
 class QuestionModal(Modal):
-    def __init__(self, ticket_manager: TicketManager, ticket_type: str):
-        super().__init__(title="問題表單")
+    def __init__(self, ticket_manager: TicketManager, ticket_type: TicketType):
+        super().__init__(title=f"問題表單，客服頻道種類：{ticket_type.value}")
         self.ticket_manager = ticket_manager
         self.ticket_type = ticket_type
 
-    ques = discord.ui.TextInput(
-        label="問題描述",
-        style=discord.TextStyle.paragraph,
-        placeholder="範例：我已經下單了，為何還沒有收到貨？\n我的訂單編號是#25565",
-        required=True,
-    )
+        if self.ticket_type == TicketType.PURCHASE:
+            self.order_id_input = TextInput(
+                label="訂單編號（選填，若已經下單，可以填入訂單編號加快處理速度）",
+                style=discord.TextStyle.short,
+                placeholder="#25565",
+                required=False,
+            )
+            self.add_item(self.order_id_input)
+        elif self.ticket_type == TicketType.GUILD:
+            self.guild_problem_input = TextInput(
+                label="群組問題分類（選填，若有特定群組問題，可以填入）",
+                style=discord.TextStyle.short,
+                placeholder="例如：領獎/身分組/檢舉/問題回報...等",
+                required=False,
+            )
+            self.add_item(self.guild_problem_input)
+        self.description_input = TextInput(
+            label="問題描述",
+            style=discord.TextStyle.paragraph,
+            placeholder="詳細說明遇到的問題",
+            required=True,
+            max_length=1500,
+        )
+        self.add_item(self.description_input)
 
     async def on_submit(self, interaction: Interaction) -> None:
         # Defer ephemerally. This shows a private "thinking" message
@@ -33,7 +51,7 @@ class QuestionModal(Modal):
             new_channel = await self.ticket_manager.create_ticket(
                 user=interaction.user,
                 guild=interaction.guild,
-                ticket_type=self.ticket_type,
+                ticket_type=self.ticket_type.value,
                 close_view=TicketCloseToggleView(self.ticket_manager),
             )
 
@@ -42,8 +60,19 @@ class QuestionModal(Modal):
 
             # 2. Send the user's question directly into the new channel.
             await new_channel.send(
-                content=f"**來自 {interaction.user.mention} 的問題：**\n>>> {self.ques.value}"
+                content=f"**來自 {interaction.user.mention} 的問題：**\n>>> {self.description_input.value}"
             )
+
+            if self.ticket_type == TicketType.PURCHASE and self.order_id_input.value:
+                await new_channel.send(
+                    content=f"**訂單編號**：`{self.order_id_input.value}`"
+                )
+            elif (
+                self.ticket_type == TicketType.GUILD and self.guild_problem_input.value
+            ):
+                await new_channel.send(
+                    content=f"**群組問題分類**：`{self.guild_problem_input.value}`"
+                )
 
             # 3. Send a final, persistent confirmation to the user.
             await interaction.followup.send(
@@ -69,7 +98,7 @@ class TicketCreationView(View):
     async def pur_callback(self, interaction: Interaction, button: Button):
         assert button.custom_id
         modal = QuestionModal(
-            ticket_manager=self.ticket_manager, ticket_type=button.custom_id
+            ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
         )
         await interaction.response.send_modal(modal)
 
@@ -82,7 +111,7 @@ class TicketCreationView(View):
     async def guild_callback(self, interaction: Interaction, button: Button):
         assert button.custom_id
         modal = QuestionModal(
-            ticket_manager=self.ticket_manager, ticket_type=button.custom_id
+            ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
         )
         await interaction.response.send_modal(modal)
 
@@ -95,7 +124,7 @@ class TicketCreationView(View):
     async def others_callback(self, interaction: Interaction, button: Button):
         assert button.custom_id
         modal = QuestionModal(
-            ticket_manager=self.ticket_manager, ticket_type=button.custom_id
+            ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
         )
         await interaction.response.send_modal(modal)
 
@@ -146,7 +175,9 @@ class TicketCloseView(View):
 
         # Actually close the channel
         try:
-            await self.ticket_manager.close_ticket(channel=interaction.channel)
+            await self.ticket_manager.close_ticket(
+                channel=interaction.channel, client=interaction.client
+            )
             view = TicketAfterClose(ticket_manager=self.ticket_manager)
             await interaction.followup.send(
                 content="頻道已關閉。接下來你想要？", view=view
