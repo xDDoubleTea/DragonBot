@@ -10,7 +10,6 @@ from config.models import (
     Ticket,
     TicketStatus,
     TicketType,
-    ticket_status_name_chinese,
 )
 from db.database_manager import DatabaseManager
 from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFound
@@ -100,7 +99,7 @@ class TicketManager:
                 auto_timeout=ticket_data["auto_timeout"],
                 timed_out=ticket_data["timed_out"],
                 close_msg_id=ticket_data["close_msg_id"],
-                status=TicketStatus(ticket_data["status"]),
+                status=TicketStatus.from_id(ticket_data["status"]),
                 ticket_type=TicketType(ticket_data["ticket_type"]),
                 guild_id=ticket_data["guild_id"],
                 close_msg_type=ticket_data["close_msg_type"],
@@ -376,7 +375,7 @@ class TicketManager:
             )
             # We just set it manually since creating a Ticket object here is meaningless.
             await new_channel.edit(
-                name=f"{ticket_type}-{new_ticket_id:04d}-{ticket_status_name_chinese.get(TicketStatus.OPEN)}"
+                name=f"{ticket_type}-{new_ticket_id:04d}-{TicketStatus.OPEN.string_repr}"
             )
             db.insert(
                 table_name=self.ticket_participants_table_name,
@@ -606,7 +605,7 @@ class TicketManager:
             ticket_channel = ticket_cnl_temp
 
         # We pray for cache hit everytime.
-        status_name = ticket_status_name_chinese.get(ticket.status)
+        status_name = ticket.status.string_repr
         await ticket_channel.edit(
             name=f"{ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}"
         )
