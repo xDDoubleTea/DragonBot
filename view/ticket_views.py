@@ -172,7 +172,6 @@ class TicketCloseView(View):
         )
         await interaction.response.defer(thinking=True)
         await interaction.message.edit(view=None)
-
         # Actually close the channel
         try:
             await self.ticket_manager.close_ticket(

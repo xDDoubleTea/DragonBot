@@ -1,5 +1,5 @@
-from enum import IntEnum, StrEnum
-from typing import List, Optional, Dict
+from enum import IntEnum, StrEnum, Enum
+from typing import List, Optional, Dict, Set
 from dataclasses import dataclass, field
 
 from discord import Client, Color, Guild, TextChannel
@@ -20,15 +20,53 @@ __all__ = [
 ]
 
 
-class TicketStatus(IntEnum):
+class TicketStatus(Enum):
     """
     Represents the status of a ticket
     """
 
-    OPEN = 0
-    IN_PROGRESS = 1
-    RESOLVED = 2
-    CLOSED = 3
+    OPEN = (0, "待處理")
+    IN_PROGRESS = (1, "處理中")
+    RESOLVED = (2, "處理完畢")
+    CLOSED = (3, "已關閉")
+
+    def __init__(self, id: int, string_repr: str):
+        self.id = id
+        self.string_repr = string_repr
+
+    @classmethod
+    def from_id(cls, status_id: int) -> "TicketStatus":
+        """
+        Looks up an enum member by its integer ID.
+        Returns the TicketStatus member or None if the ID is not found.
+        """
+        # This is an efficient reverse lookup.
+        # We iterate through all members of the class (`cls`) and check their `id` attribute.
+        for member in cls:
+            if member.id == status_id:
+                return member
+        return cls.OPEN  # Defaults to OPEN if no match is found, for safety.
+
+
+class RoleRequestStatus(Enum):
+    NOT_SET = (0, "未設置申請以及審核頻道")
+    ONLY_REQUEST = (1, "未設置申請頻道")
+    ONLY_APPROVE = (2, "未設置審核頻道")
+    NO_ROLE = (3, "沒有加入可申請身份組")
+    SET = (4, "已啟用")
+
+    def __init__(self, id: int, string_repr: str):
+        self.id = id
+        self.string_repr = string_repr
+
+
+class RoleRequestChannelType(Enum):
+    REQUEST = (0, "request_channel_id")
+    APPROVAL = (1, "approval_channel_id")
+
+    def __init__(self, db_id: int, column_name: str):
+        self.db_id = db_id
+        self.column_name = column_name
 
 
 class CloseMessageType(IntEnum):
@@ -153,5 +191,14 @@ class Ticket:
     timed_out: int
     close_msg_id: int
     status: TicketStatus
+    ticket_type: TicketType
     guild_id: int
     close_msg_type: CloseMessageType
+
+
+@dataclass
+class RoleRequestData:
+    guild_id: int
+    request_channel_id: Optional[int]
+    approval_channel_id: Optional[int]
+    requestable_roles: Set[int]

@@ -6,6 +6,7 @@ __all__ = [
     "bot_token",
     "pre",
     "eng_to_chinese",
+    "currency_information_url",
     "My_user_id",
     "version",
     "MyDiscordID",
@@ -15,6 +16,7 @@ __all__ = [
     "THEME_COLOR",
     "logchannel_id",
     "archive_channel_id",
+    "ericdragon_user_id",
     "feedback_channel_id",
     "app_id",
     "MY_GUILD",
@@ -31,6 +33,9 @@ __all__ = [
     "online_cmds",
     "monitor_cmds",
     "game_cmds",
+    "admin_role_id",
+    "epic_dragon_role_id",
+    "rare_dragon_role_id",
 ]
 load_dotenv()
 app_mode = os.getenv("APP_MODE")
@@ -56,10 +61,13 @@ eng_to_chinese = {
     "Saturday": "六",
     "Sunday": "日",
 }
+
+
 My_user_id = 398444155132575756
 version = 4.0
 MyDiscordID = "hoshiyomi6942"
 default_footer = f"Developed by {MyDiscordID} version:{version}"
+
 
 cmd_channel_id = 461556173011943435 if app_mode == "prod" else 1073168107813740556
 # In production guild, cmd_channel_id is 461556173011943435
@@ -70,6 +78,11 @@ cus_service_role_id = 856792148060667934 if app_mode == "prod" else 138889658017
 # In test guild, cus_service_role_id is 1388896580173828188
 
 THEME_COLOR = Color.from_rgb(190, 119, 255)
+ericdragon_user_id = 403844178687033345
+
+admin_role_id = 740487435015946271
+epic_dragon_role_id = 740487435015946271
+rare_dragon_role_id = 446617194743201792
 
 logchannel_id = 977445485180751882 if app_mode == "prod" else 1388896453446991902
 # In production guild, logchannel is 977445485180751882
@@ -91,6 +104,8 @@ MY_GUILD = (
 )
 # guild dragon 403844884374487040
 # test guild 1039906085626196079
+
+currency_information_url = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
 
 NOT_REQUESTABLE_ROLES_ID = [
     584419521692172316,
