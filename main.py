@@ -11,6 +11,7 @@ from config import (
     db_url,
     MY_GUILD,
 )
+from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
 from db.database_manager import DatabaseManager, AsyncDatabaseManager
@@ -33,6 +34,9 @@ class DragonBot(commands.Bot):
         self.keyword_manager = KeywordManager(
             bot=self, database_manager=self.async_db_manager
         )
+        self.role_request_manager = RoleRequestManager(
+            bot=self, database_manager=self.async_db_manager
+        )
 
     async def on_ready(self):
         print(f"{self.user} is now online!")
@@ -47,6 +51,9 @@ class DragonBot(commands.Bot):
         print("Connected to the database")
         await self.keyword_manager.initialize_cache()
         print("Keyword cache initialized")
+        print("Initializing role request data cache")
+        await self.role_request_manager.init_cache()
+        print("Role request data cache initialized")
         for cog in filter(
             lambda file: file.endswith(".py"),
             os.listdir("./cogs"),
