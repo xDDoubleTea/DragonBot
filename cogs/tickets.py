@@ -7,9 +7,15 @@ from discord.ext.commands import Cog
 from discord.ext.commands.hybrid import app_commands
 from config.canned_response import ReplyKeys
 from config.constants import (
+    My_user_id,
     ticket_system_main_message,
     cus_service_role_id,
     cmd_channel_id,
+    ericdragon_user_id,
+    epic_dragon_role_id,
+    admin_role_id,
+    rare_dragon_role_id,
+    app_id,
 )
 from config.models import CloseMessageType, TicketStatus
 from config.canned_response import CANNED_RESPONSES
@@ -138,12 +144,28 @@ class tickets(Cog):
                     db.delete(table_name="tickets", criteria={"id": ticket_id})
         print("Done!")
 
+    @staticmethod
+    def _admin_mentioned(message: Message) -> bool:
+        return bool(
+            (len(message.raw_mentions) or len(message.raw_role_mentions))
+            and (
+                cus_service_role_id in message.raw_role_mentions
+                or app_id in message.raw_mentions
+                or ericdragon_user_id in message.raw_mentions
+                or My_user_id in message.raw_mentions
+                or admin_role_id in message.raw_role_mentions
+                or epic_dragon_role_id in message.raw_role_mentions
+                or rare_dragon_role_id in message.raw_role_mentions
+            )
+        )
+
     @Cog.listener(name="on_message")
     async def on_message(self, message: Message):
         if message.author.bot:
             return
         ticket = await self.ticket_manager.get_ticket(channel_id=message.channel.id)
         if not ticket:
+            # We don't care about the message sent outside of tickets.
             return
 
         assert (
@@ -159,6 +181,40 @@ class tickets(Cog):
         ):
             await self.ticket_manager.set_ticket_status(
                 ticket=ticket, new_status=TicketStatus.IN_PROGRESS
+            )
+        if self._admin_mentioned(message=message):
+            await message.channel.send(
+                "你好！我們已收到你的訊息，感謝你與我們聯繫。待上線後將會回答您的問題~"
+            )
+
+    @Cog.listener(name="on_message_edit")
+    async def on_message_edit(self, before: Message, after: Message):
+        if before.author.bot:
+            return
+        ticket = await self.ticket_manager.get_ticket(channel_id=after.channel.id)
+        if not ticket:
+            # We don't care about the message sent outside of tickets.
+            return
+
+        assert (
+            after.guild
+            and isinstance(after.channel, TextChannel)
+            and isinstance(after.author, Member)
+        )
+        # Because ticket is a TextChannel in a Guild, AssertionError won't be raised
+        cus_service_role = after.guild.get_role(cus_service_role_id)
+        if (
+            ticket.status == TicketStatus.OPEN
+            and cus_service_role in after.author.roles
+        ):
+            await self.ticket_manager.set_ticket_status(
+                ticket=ticket, new_status=TicketStatus.IN_PROGRESS
+            )
+        if self._admin_mentioned(message=after) and not self._admin_mentioned(
+            message=before
+        ):
+            await after.channel.send(
+                "你好！我們已收到你的訊息，感謝你與我們聯繫。待上線後將會回答您的問題~"
             )
 
     @Cog.listener(name="on_guild_channel_delete")
