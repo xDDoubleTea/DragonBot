@@ -99,7 +99,7 @@ class TicketManager:
 
     @staticmethod
     async def try_get_member(guild: Guild, member_id: int) -> Optional[Member]:
-        await get_or_fetch(
+        return await get_or_fetch(
             container=guild,
             obj_id=member_id,
             get_method_name="get_member",

@@ -304,7 +304,7 @@ class TicketsCog(Cog):
                 criteria={"message_id": message.id},
             )
 
-            self.panel_messages.pop(message.id)
+            self.panel_messages.pop(message.guild.id, None)
         elif await self.ticket_manager.database_manager.select(
             table_name=self.ticket_manager.ticket_panels_table_name,
             criteria={"message_id": message.id},

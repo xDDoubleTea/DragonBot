@@ -36,16 +36,16 @@ class KeywordCog(Cog):
     ):
         self.bot = bot
         self.keyword_manager = keyword_manager
-        self.ticket_manger = ticket_manager
+        self.ticket_manager = ticket_manager
 
     async def _get_response(self, keyword: Keyword, channel_id: int) -> str:
         """
         Private helper function to correctly generate the response.
         """
         resp = keyword.response
-        ticket_check = await self.ticket_manger.get_ticket(channel_id=channel_id)
+        ticket_check = await self.ticket_manager.get_ticket(channel_id=channel_id)
         if keyword.mention_participants and ticket_check:
-            member_list = await self.ticket_manger.get_ticket_participants_member(
+            member_list = await self.ticket_manager.get_ticket_participants_member(
                 ticket_id=ticket_check.db_id
             )
             if member_list:
@@ -77,7 +77,7 @@ class KeywordCog(Cog):
         for trigger, keyword in all_keywords.items():
             if not keyword.is_allowed_in(
                 channel_id=message.channel.id,
-                is_ticket_channel=await self.ticket_manger.is_ticket_channel(
+                is_ticket_channel=await self.ticket_manager.is_ticket_channel(
                     channel_id=message.channel.id
                 ),
             ):
