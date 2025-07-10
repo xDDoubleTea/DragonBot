@@ -1,33 +1,23 @@
-from discord import (
-    Guild,
-    TextChannel,
-    app_commands,
-    Interaction,
-    Member,
-    Attachment,
-    Role,
-    errors,
-    Thread,
-    Embed,
-)
+import discord
 from discord.abc import GuildChannel
 from discord.ext import commands
 from discord.ext.commands import Cog
-from typing import Optional, Union, Set
+from typing import Optional, Union, Set, Any
 from discord.app_commands.errors import AppCommandError, MissingPermissions
 from config.models import RoleRequestStatus
 from core.role_requesting_manager import (
     NoRequestableRolestoRemove,
     RoleRequestManager,
     RoleRequestChannelType,
-    RoleAleardyNotRequestable,
+    RoleAlreadyNotRequestable,
 )
 from utils.embed_utils import create_themed_embed
 from view.role_request_view import request_view
+from utils.discord_utils import get_or_fetch
 
 
 class RoleRequest(Cog):
-    role_config = app_commands.Group(
+    role_config = discord.app_commands.Group(
         name="role_config",
         description="Configure the role request system for this server.",
     )
@@ -36,16 +26,19 @@ class RoleRequest(Cog):
         self.bot = bot
         self.role_request_manager = role_request_manager
 
+    @staticmethod
     async def try_get_channel(
-        self, guild: Guild, channel_id: int
-    ) -> Optional[Union[GuildChannel, Thread]]:
-        channel = guild.get_channel(channel_id)
-        if not channel:
-            try:
-                channel = await guild.fetch_channel(channel_id)
-            except errors.NotFound:
-                return None
-        return channel
+        guild: discord.Guild, channel_id: int
+    ) -> Optional[Union[GuildChannel, discord.Thread]]:
+        """
+        Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
+        """
+        return await get_or_fetch(
+            container=guild,
+            obj_id=channel_id,
+            get_method_name="get_channel",
+            fetch_method_name="fetch_channel",
+        )
 
     async def _get_request_sys_status(self, guild_id: int) -> RoleRequestStatus:
         request_channel_id = await self.role_request_manager.get_typed_channel_id(
@@ -66,7 +59,7 @@ class RoleRequest(Cog):
 
     @Cog.listener()
     async def on_app_command_error(
-        self, interaction: Interaction, error: AppCommandError
+        self, interaction: discord.Interaction, error: AppCommandError
     ):
         """A global error handler for all commands in this cog."""
         if isinstance(error, MissingPermissions):
@@ -74,7 +67,7 @@ class RoleRequest(Cog):
                 "你不是管理員，沒有權限使用此指令！", ephemeral=True
             )
         # Handle cases where the interaction has already been responded to
-        elif isinstance(error, errors.InteractionResponded):
+        elif isinstance(error, discord.errors.InteractionResponded):
             await interaction.followup.send(
                 "發生了一個內部錯誤，但已成功回覆。", ephemeral=True
             )
@@ -94,63 +87,63 @@ class RoleRequest(Cog):
         name="set_channel",
         description="設置身份組審核系統的頻道",
     )
-    @app_commands.describe(
+    @discord.app_commands.describe(
         channel_type="設定的頻道種類",
         channel="你想設置的頻道，預設為觸發的頻道",
     )
-    @app_commands.choices(
+    @discord.app_commands.choices(
         channel_type=[
             # The choices are created directly from your Enum.
             # The `name` is shown to the user, and the `value` is what you receive in the code.
-            app_commands.Choice(
+            discord.app_commands.Choice(
                 name="使用者申請頻道", value=RoleRequestChannelType.REQUEST.name
             ),  # "REQUEST"
-            app_commands.Choice(
+            discord.app_commands.Choice(
                 name="管理員審核頻道",
                 value=RoleRequestChannelType.APPROVAL.name,
             ),  # "APPROVAL"
         ]
     )
-    @app_commands.guild_only()
-    @app_commands.checks.has_permissions(administrator=True)
+    @discord.app_commands.guild_only()
+    @discord.app_commands.checks.has_permissions(administrator=True)
     async def set_channel(
         self,
-        interaction: Interaction,
-        channel_type: app_commands.Choice[str],
-        channel: Optional[TextChannel],
-    ):
+        interaction: discord.Interaction,
+        channel_type: discord.app_commands.Choice[str],
+        channel: Optional[discord.TextChannel],
+    ) -> Any | None:
         """
         Sets a channel ID based on the enum type provided by the user's choice.
         """
         assert interaction.guild
         await interaction.response.defer(ephemeral=True)
-        if not isinstance(interaction.channel, TextChannel):
+        if not isinstance(interaction.channel, discord.TextChannel):
             return await interaction.followup.send(
                 "此指令只能在文字頻道中使用！", ephemeral=True
             )
         if not channel:
             channel = interaction.channel
-        # Convert the string value from the choice back into an Enum member
         selected_type_enum = RoleRequestChannelType[channel_type.value]
 
-        # Call your generic manager method
         await self.role_request_manager.set_typed_channel_id(
             guild_id=interaction.guild.id,
             cnl_type=selected_type_enum,
             channel_id=channel.id,
         )
 
-        # Use the enum's friendly name for the response message
-        friendly_name = channel_type.name  # e.g., "User Request Channel"
+        friendly_name = channel_type.name
         await interaction.followup.send(
             f"{channel.mention}已經被設置為**{friendly_name}**", ephemeral=True
         )
+        return None
 
     @role_config.command(name="add_requestable_role", description="加入可申請的身份組")
-    @app_commands.guild_only()
-    @app_commands.describe(role="欲加入的身份組")
-    @app_commands.checks.has_permissions(administrator=True)
-    async def add_requestable_role(self, interaction: Interaction, role: Role):
+    @discord.app_commands.guild_only()
+    @discord.app_commands.describe(role="欲加入的身份組")
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def add_requestable_role(
+        self, interaction: discord.Interaction, role: discord.Role
+    ):
         assert interaction.guild
         if (
             request_sys_status := await self._get_request_sys_status(
@@ -171,12 +164,14 @@ class RoleRequest(Cog):
     @role_config.command(
         name="remove_requestable_role", description="移除可申請的身份組"
     )
-    @app_commands.describe(
+    @discord.app_commands.describe(
         role="欲移除的身份組",
     )
-    @app_commands.guild_only()
-    @app_commands.checks.has_permissions(administrator=True)
-    async def remove_requestable_role(self, interaction: Interaction, role: Role):
+    @discord.app_commands.guild_only()
+    @discord.app_commands.checks.has_permissions(administrator=True)
+    async def remove_requestable_role(
+        self, interaction: discord.Interaction, role: discord.Role
+    ):
         assert interaction.guild
         if (
             request_sys_status := await self._get_request_sys_status(
@@ -193,7 +188,7 @@ class RoleRequest(Cog):
             )
         except NoRequestableRolestoRemove as e:
             return await interaction.response.send_message(e.message, ephemeral=True)
-        except RoleAleardyNotRequestable as e:
+        except RoleAlreadyNotRequestable as e:
             return await interaction.response.send_message(
                 role.mention + e.message, ephemeral=True
             )
@@ -201,7 +196,9 @@ class RoleRequest(Cog):
             f"已經從可申請的身份組中移除{role.mention}", ephemeral=True
         )
 
-    async def get_requestable_roles_obj(self, guild: Guild) -> Set[Role]:
+    async def get_requestable_roles_obj(
+        self, guild: discord.Guild
+    ) -> Set[discord.Role]:
         return set(
             role
             for role in map(
@@ -213,7 +210,7 @@ class RoleRequest(Cog):
             if role is not None
         )
 
-    async def get_requestable_roles_mention(self, guild: Guild) -> str:
+    async def get_requestable_roles_mention(self, guild: discord.Guild) -> str:
         returning = " ".join(
             map(
                 lambda role: role.mention if role else "",
@@ -227,7 +224,7 @@ class RoleRequest(Cog):
         )
         return returning if returning else "無"
 
-    async def get_guild_status_embed(self, guild: Guild) -> Embed:
+    async def get_guild_status_embed(self, guild: discord.Guild) -> discord.Embed:
         embed = create_themed_embed(
             title="身份組申請系統狀態",
             description="伺服器：" + guild.name,
@@ -263,23 +260,23 @@ class RoleRequest(Cog):
         )
         return embed
 
-    @app_commands.command(
+    @discord.app_commands.command(
         name="身份組申請系統狀態check_request_status",
         description="查看此伺服器申請身份組系統狀態",
     )
-    @app_commands.guild_only()
-    async def check_request_status(self, interaction: Interaction):
+    @discord.app_commands.guild_only()
+    async def check_request_status(self, interaction: discord.Interaction):
         assert interaction.guild
         await interaction.response.defer(ephemeral=True, thinking=True)
         embed = await self.get_guild_status_embed(guild=interaction.guild)
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(
+    @discord.app_commands.command(
         name="可申請身份組check_requestable_roles",
         description="可以申請的身份組有哪些？",
     )
-    @app_commands.guild_only()
-    async def check_requestable_roles(self, interaction: Interaction):
+    @discord.app_commands.guild_only()
+    async def check_requestable_roles(self, interaction: discord.Interaction):
         assert interaction.guild
         await interaction.response.defer(ephemeral=True, thinking=True)
         requestable_roles_str = await self.get_requestable_roles_mention(
@@ -295,23 +292,23 @@ class RoleRequest(Cog):
         )
         await interaction.followup.send(embed=embed, ephemeral=True)
 
-    @app_commands.command(
+    @discord.app_commands.command(
         name="申請身份組request_role", description="申請前請先看過規定"
     )
-    @app_commands.describe(
+    @discord.app_commands.describe(
         role="欲申請之身分組",
         image="證明圖片",
         yt_channel_url="[選填]若申請身分組為@Youtuber或@大偶像!，請提供頻道連結",
     )
-    @app_commands.guild_only()
+    @discord.app_commands.guild_only()
     async def request(
         self,
-        interaction: Interaction,
-        role: Role,
-        image: Attachment,
+        interaction: discord.Interaction,
+        role: discord.Role,
+        image: discord.Attachment,
         yt_channel_url: Optional[str],
     ):
-        assert interaction.guild and isinstance(interaction.user, Member)
+        assert interaction.guild and isinstance(interaction.user, discord.Member)
         await interaction.response.defer(ephemeral=True, thinking=True)
         # This is guild only command.
         if not await self.role_request_manager.is_system_configured(
@@ -321,7 +318,7 @@ class RoleRequest(Cog):
                 "此伺服器還未設置申請身份組功能！如果你認為這是不合理的，請通知伺服器管理員！",
                 ephemeral=True,
             )
-        if not await self.role_request_manager.role_requestble(
+        if not await self.role_request_manager.role_requestable(
             guild_id=interaction.guild.id, role_id=role.id
         ):
             return await interaction.followup.send(
@@ -366,7 +363,7 @@ class RoleRequest(Cog):
                 "此伺服器的審核頻道似乎被刪掉了...請通知伺服器管理員",
                 ephemeral=True,
             )
-        assert isinstance(interaction.user, Member)
+        assert isinstance(interaction.user, discord.Member)
         embed = create_themed_embed(
             client=interaction.client,
             title="身分組申請資料",
@@ -376,7 +373,7 @@ class RoleRequest(Cog):
         assert embed.description
         if yt_channel_url:
             embed.description += f"\n提供YT頻道：{yt_channel_url}"
-        assert isinstance(approval_cnl, TextChannel)
+        assert isinstance(approval_cnl, discord.TextChannel)
         view = request_view(role=role, member=interaction.user)
         await approval_cnl.send(embed=embed, view=view)
         return await interaction.followup.send(

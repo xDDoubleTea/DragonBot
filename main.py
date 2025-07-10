@@ -30,7 +30,9 @@ class DragonBot(commands.Bot):
         assert db_url is not None
         self.db_manager = DatabaseManager(database_url=db_url)
         self.async_db_manager = AsyncDatabaseManager(db_url=db_url)
-        self.ticket_manager = TicketManager(bot=self, database_manager=self.db_manager)
+        self.ticket_manager = TicketManager(
+            bot=self, database_manager=self.async_db_manager
+        )
         self.keyword_manager = KeywordManager(
             bot=self, database_manager=self.async_db_manager
         )
@@ -54,6 +56,7 @@ class DragonBot(commands.Bot):
         print("Initializing role request data cache")
         await self.role_request_manager.init_cache()
         print("Role request data cache initialized")
+        await self.ticket_manager.init_cache()
         for cog in filter(
             lambda file: file.endswith(".py"),
             os.listdir("./cogs"),

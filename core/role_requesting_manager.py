@@ -11,7 +11,7 @@ class NoRequestableRolestoRemove(Exception):
         super().__init__()
 
 
-class RoleAleardyNotRequestable(Exception):
+class RoleAlreadyNotRequestable(Exception):
     def __init__(self, message: str = "身份組不是可申請的身份組") -> None:
         self.message = message
         super().__init__(message)
@@ -47,26 +47,6 @@ class RoleRequestManager:
                     guild_id=data["guild_id"]
                 ),
             )
-
-    async def _guild_in_cache_or_db(self, guild_id: int) -> Optional[RoleRequestData]:
-        """
-        You can use this function by doing if role_request_data := await self._guild_in_cache_or_db(guild_id): ...
-        This function will return the RoleRequestData object if guild_id is in cache or in database. Returns None if not found in both.
-        """
-        if role_request_dataclass := self.role_request_cache.get(guild_id, None):
-            return role_request_dataclass
-        role_request_raw_data = await self.database_manager.select(
-            table_name="role_request", criteria={"guild_id": guild_id}, fetch_one=True
-        )
-        if not role_request_raw_data:
-            return None
-        self.role_request_cache[guild_id] = RoleRequestData(
-            guild_id=guild_id,
-            request_channel_id=role_request_raw_data["request_channel_id"],
-            approval_channel_id=role_request_raw_data["approval_channel_id"],
-            requestable_roles=await self.get_requestable_roles(guild_id=guild_id),
-        )
-        return self.role_request_cache[guild_id]
 
     async def _get_or_create_config(self, guild_id: int) -> RoleRequestData:
         """
@@ -133,7 +113,7 @@ class RoleRequestManager:
         )
         setattr(config, cnl_type.column_name, channel_id)
 
-    async def role_requestble(self, guild_id: int, role_id: int) -> bool:
+    async def role_requestable(self, guild_id: int, role_id: int) -> bool:
         return role_id in await self.get_requestable_roles(guild_id=guild_id)
 
     async def add_requestable_role(self, guild_id: int, role_id: int) -> int | None:
@@ -157,7 +137,7 @@ class RoleRequestManager:
         if not config.requestable_roles:
             raise NoRequestableRolestoRemove()
         if role_id not in config.requestable_roles:
-            raise RoleAleardyNotRequestable()
+            raise RoleAlreadyNotRequestable()
         # If the role is requestable, we remove it from the cache and database
         await self.database_manager.delete(
             table_name=self.guild_requestable_roles_table_name,

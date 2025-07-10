@@ -1,7 +1,7 @@
 from discord import ButtonStyle, Interaction, TextStyle
 from discord.ui import Modal, TextInput, View, button, Button
 
-from config.models import BooleanToStr, Keyword, KeywordType, StrToBoolean
+from config.models import boolean_to_str, Keyword, KeywordType, str_to_boolean
 from core.keyword_manager import KeywordManager
 
 
@@ -37,14 +37,14 @@ class KeywordChangeModal(Modal):
             style=TextStyle.short,
             max_length=1,
             required=False,
-            placeholder=f"{BooleanToStr(keyword.in_ticket_only)}->{BooleanToStr(new_keyword.in_ticket_only)}",
+            placeholder=f"{boolean_to_str(keyword.in_ticket_only)}->{boolean_to_str(new_keyword.in_ticket_only)}",
         )
         self.mention_participants_input = TextInput(
             label="提及參與者（是或否）",
             style=TextStyle.short,
             max_length=1,
             required=False,
-            placeholder=f"{BooleanToStr(keyword.mention_participants)}->{BooleanToStr(new_keyword.mention_participants)}",
+            placeholder=f"{boolean_to_str(keyword.mention_participants)}->{boolean_to_str(new_keyword.mention_participants)}",
         )
         self.add_item(self.response_input)
         self.add_item(self.type_input)
@@ -63,12 +63,12 @@ class KeywordChangeModal(Modal):
             )
             return
 
-        ticket_only_val = self.in_ticket_only_input.value or BooleanToStr(
+        ticket_only_val = self.in_ticket_only_input.value or boolean_to_str(
             self.new_keyword.in_ticket_only
         )
         if ticket_only_val and ticket_only_val not in {
-            BooleanToStr(True),
-            BooleanToStr(False),
+            boolean_to_str(True),
+            boolean_to_str(False),
         }:
             await interaction.response.send_message(
                 f"錯誤：僅在客服頻道觸發的值 '{ticket_only_val}' 不是 '是' 或 '否'。",
@@ -76,10 +76,10 @@ class KeywordChangeModal(Modal):
             )
             return
 
-        mention_val = self.mention_participants_input.value or BooleanToStr(
+        mention_val = self.mention_participants_input.value or boolean_to_str(
             self.new_keyword.mention_participants
         )
-        if mention_val and mention_val not in {BooleanToStr(True), BooleanToStr(False)}:
+        if mention_val and mention_val not in {boolean_to_str(True), boolean_to_str(False)}:
             await interaction.response.send_message(
                 f"錯誤：提及參與者的值 '{mention_val}' 不是 '是' 或 '否'。",
                 ephemeral=True,
@@ -92,9 +92,9 @@ class KeywordChangeModal(Modal):
         if kw_type_val:
             update_data["kw_type"] = KeywordType(kw_type_val)
         if ticket_only_val:
-            update_data["in_ticket_only"] = StrToBoolean(ticket_only_val)
+            update_data["in_ticket_only"] = str_to_boolean(ticket_only_val)
         if mention_val:
-            update_data["mention_participants"] = StrToBoolean(mention_val)
+            update_data["mention_participants"] = str_to_boolean(mention_val)
 
         # --- Database Update Step ---
         if not update_data:

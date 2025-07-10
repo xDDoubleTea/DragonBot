@@ -2,7 +2,8 @@ import io
 import discord
 from discord.ext import commands
 from discord import Guild, User, Member, Embed, TextChannel, Client
-from typing import Union, List, Optional
+from discord.abc import GuildChannel
+from typing import Union, List, Optional, Dict, Set
 from discord.ui import View
 import yaml
 from config.models import (
@@ -10,8 +11,9 @@ from config.models import (
     Ticket,
     TicketStatus,
     TicketType,
+    PanelMessageData,
 )
-from db.database_manager import DatabaseManager
+from db.database_manager import AsyncDatabaseManager
 from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFound
 from config.constants import (
     cus_service_role_id,
@@ -20,7 +22,9 @@ from config.constants import (
     THEME_COLOR,
     archive_channel_id,
 )
+
 import asyncio
+from utils.discord_utils import get_or_fetch
 from utils.embed_utils import create_themed_embed
 import subprocess
 from datetime import datetime, timedelta
@@ -32,12 +36,75 @@ from view.feedback_views import FeedBackSystem, feedbackEmbed
 
 
 class TicketManager:
-    def __init__(self, bot: commands.Bot, database_manager: DatabaseManager):
+    def __init__(self, bot: commands.Bot, database_manager: AsyncDatabaseManager):
         self.database_manager = database_manager
         self.bot = bot
         self.ticket_table_name = "tickets"
         self.ticket_panels_table_name = "ticket_panels"
         self.ticket_participants_table_name = "ticket_participants"
+        self.panel_messages: Dict[int, PanelMessageData] = dict()
+        self.ticket_caches: Dict[int, Ticket] = dict()
+
+    @staticmethod
+    async def try_get_channel(
+        guild: discord.Guild, channel_id: int
+    ) -> Optional[Union[GuildChannel, discord.Thread]]:
+        """
+        Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
+        """
+        return await get_or_fetch(
+            container=guild,
+            obj_id=channel_id,
+            get_method_name="get_channel",
+            fetch_method_name="fetch_channel",
+        )
+
+    async def try_get_channel_by_bot(
+        self, channel_id: int
+    ) -> Optional[Union[GuildChannel, discord.Thread]]:
+        """
+        Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
+        """
+        return await get_or_fetch(
+            container=self.bot,
+            obj_id=channel_id,
+            get_method_name="get_channel",
+            fetch_method_name="fetch_channel",
+        )
+
+    async def try_get_guild(
+        self,
+        guild_id: int,
+    ) -> Optional[Guild]:
+        """
+        Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
+        """
+        return await get_or_fetch(
+            container=self.bot,
+            obj_id=guild_id,
+            get_method_name="get_guild",
+            fetch_method_name="fetch_guild",
+        )
+
+    async def try_get_ticket_in_cache_by_channel_id(
+        self, channel_id: int
+    ) -> Optional[Ticket]:
+        """
+        Attempts to get a ticket by channel ID from the cache.
+        """
+        for ticket in self.ticket_caches.values():
+            if ticket.channel_id == channel_id:
+                return ticket
+        return None
+
+    @staticmethod
+    async def try_get_member(guild: Guild, member_id: int) -> Optional[Member]:
+        return await get_or_fetch(
+            container=guild,
+            obj_id=member_id,
+            get_method_name="get_member",
+            fetch_method_name="fetch_member",
+        )
 
     def get_business_hours_embed(self) -> Embed:
         embed = create_themed_embed(
@@ -58,17 +125,47 @@ class TicketManager:
         except FileNotFoundError:
             return embed
 
-    def is_ticket_channel(self, channel_id: int) -> bool:
-        with self.database_manager as db:
-            return (
-                True
-                if db.select(
-                    table_name=self.ticket_table_name,
-                    criteria={"channel_id": channel_id},
-                    fetch_one=True,
-                )
-                else False
+    async def init_cache(self):
+        """
+        Initialize the cache for ticket panels and tickets.
+        This function should be called when the bot starts.
+        """
+        # Load ticket panels into cache
+        print("Loading ticket panels into cache...")
+        ticket_panels = await self.database_manager.select(
+            table_name=self.ticket_panels_table_name
+        )
+        for panel in ticket_panels:
+            self.panel_messages[panel["guild_id"]] = PanelMessageData(
+                message_id=panel["message_id"],
+                channel_id=panel["channel_id"],
+                guild_id=panel["guild_id"],
             )
+        print("Ticket panels loaded into cache.")
+        print("Loading tickets into cache...")
+        # Load tickets into cache
+        tickets = await self.database_manager.select(table_name=self.ticket_table_name)
+        for ticket_data in tickets:
+            ticket = Ticket(
+                db_id=ticket_data["id"],
+                channel_id=ticket_data["channel_id"],
+                auto_timeout=ticket_data["auto_timeout"],
+                timed_out=ticket_data["timed_out"],
+                close_msg_id=ticket_data["close_msg_id"],
+                status=TicketStatus.from_id(ticket_data["status"]),
+                ticket_type=TicketType(ticket_data["ticket_type"]),
+                guild_id=ticket_data["guild_id"],
+                close_msg_type=CloseMessageType(ticket_data["close_msg_type"]),
+                participants=set(),
+            )
+            participants = await self.get_ticket_participants_id(ticket_id=ticket.db_id)
+            ticket.participants = set(participants) if participants else set()
+
+            self.ticket_caches[ticket.db_id] = ticket
+        print("Tickets loaded into cache.")
+
+    async def is_ticket_channel(self, channel_id: int) -> bool:
+        return True if await self.get_ticket(channel_id=channel_id) else False
 
     async def get_ticket(
         self, *, ticket_id: Optional[int] = None, channel_id: Optional[int] = None
@@ -84,57 +181,67 @@ class TicketManager:
                 "This function must be called with exactly one keyword argument."
             )
 
-        with self.database_manager as db:
-            ticket_data = db.select(
-                table_name="tickets",
-                criteria=provided_criteria,
-                fetch_one=True,
-            )
-            if not ticket_data:
-                return None
-            assert isinstance(ticket_data, dict)
-            return Ticket(
-                db_id=ticket_data["id"],
-                channel_id=ticket_data["channel_id"],
-                auto_timeout=ticket_data["auto_timeout"],
-                timed_out=ticket_data["timed_out"],
-                close_msg_id=ticket_data["close_msg_id"],
-                status=TicketStatus.from_id(ticket_data["status"]),
-                ticket_type=TicketType(ticket_data["ticket_type"]),
-                guild_id=ticket_data["guild_id"],
-                close_msg_type=ticket_data["close_msg_type"],
-            )
+        if ticket_id and (ticket := self.ticket_caches.get(ticket_id, None)):
+            return ticket
+        if channel_id:
+            for ticket in self.ticket_caches.values():
+                if ticket.channel_id == channel_id:
+                    return ticket
+        # No cache hit. Select from database.
+        ticket_data = await self.database_manager.select(
+            table_name="tickets",
+            criteria=provided_criteria,
+            fetch_one=True,
+        )
+        if not ticket_data:
+            return None
+        return Ticket(
+            db_id=ticket_data["id"],
+            channel_id=ticket_data["channel_id"],
+            auto_timeout=ticket_data["auto_timeout"],
+            timed_out=ticket_data["timed_out"],
+            close_msg_id=ticket_data["close_msg_id"],
+            status=TicketStatus.from_id(ticket_data["status"]),
+            ticket_type=TicketType(ticket_data["ticket_type"]),
+            guild_id=ticket_data["guild_id"],
+            close_msg_type=ticket_data["close_msg_type"],
+        )
 
-    def get_ticket_participants(self, ticket_id: int) -> Union[List[int], None]:
-        with self.database_manager as db:
-            participants = db.select(
-                table_name=self.ticket_participants_table_name,
-                criteria={"ticket_id": ticket_id},
-            )
-            if not participants:
-                return None
-            assert isinstance(participants, list)
-            return [p["participant_id"] for p in participants]
+    async def get_ticket_participants_id(self, ticket_id: int) -> Union[Set[int], None]:
+        if ticket := self.ticket_caches.get(ticket_id):
+            return ticket.participants
+        participants = await self.database_manager.select(
+            table_name=self.ticket_participants_table_name,
+            criteria={"ticket_id": ticket_id},
+        )
+        if not participants:
+            return None
+        assert isinstance(participants, list)
+        return {p["participant_id"] for p in participants}
 
     async def get_ticket_participants_member(
         self, ticket_id: int
-    ) -> Union[List[Member], None]:
-        participants_ids = self.get_ticket_participants(ticket_id=ticket_id)
+    ) -> Union[Set[Member], None]:
+        participants_ids = await self.get_ticket_participants_id(ticket_id=ticket_id)
         if not participants_ids:
             return None
-        ticket_cnl = await self.get_ticket(ticket_id=ticket_id)
-        if not ticket_cnl:
+        ticket = await self.get_ticket(ticket_id=ticket_id)
+        if not ticket:
             return None
-        cnl = self.bot.get_channel(ticket_cnl.channel_id)
-        if not cnl:
+        guild = await self.try_get_guild(guild_id=ticket.guild_id)
+        if not guild:
             return None
-        assert isinstance(cnl, TextChannel)
-        members = []
+        members = set()
         for part_id in participants_ids:
-            member = cnl.guild.get_member(part_id)
+            member = await get_or_fetch(
+                container=guild,
+                obj_id=part_id,
+                get_method_name="get_member",
+                fetch_method_name="fetch_member",
+            )
             if not member:
                 continue
-            members.append(member)
+            members.add(member)
         return members
 
     async def add_ticket_participant(
@@ -143,13 +250,22 @@ class TicketManager:
         ticket = await self.get_ticket(channel_id=channel_id)
         if not ticket:
             raise ChannelNotTicket
-        ticket_guild = self.bot.get_guild(ticket.guild_id)
+        ticket_guild = await self.try_get_guild(guild_id=ticket.guild_id)
         if not ticket_guild:
-            ticket_guild = await self.bot.fetch_guild(ticket.guild_id)
-        ticket_channel = ticket_guild.get_channel(channel_id)
-        assert isinstance(ticket_channel, TextChannel)
-        member_obj = ticket_guild.get_member(participant_id)
+            raise Exception(
+                f"Guild with id {ticket.guild_id} cannot be found. Please check if the bot is in the guild."
+            )
+        ticket_channel = await self.try_get_channel(
+            guild=ticket_guild, channel_id=ticket.channel_id
+        )
+        if not ticket_channel:
+            raise Exception(
+                f"Channel with id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
+            )
 
+        member_obj = await self.try_get_member(
+            guild=ticket_guild, member_id=participant_id
+        )
         if not member_obj:
             raise Exception(f"Member object cannot be find with id {participant_id}")
 
@@ -160,17 +276,16 @@ class TicketManager:
 
         overwrites = ticket_channel.overwrites
         overwrites[member_obj] = discord.PermissionOverwrite(read_messages=True)
-        with self.database_manager as db:
-            try:
-                db.insert(
-                    table_name=self.ticket_participants_table_name,
-                    data={"ticket_id": ticket.db_id, "participant_id": participant_id},
-                    returning_col="ticket_id",
-                )
-            except Exception as e:
-                print(
-                    f"Error occured when adding user with id {participant_id} into database. {e}"
-                )
+        try:
+            await self.database_manager.insert(
+                table_name=self.ticket_participants_table_name,
+                data={"ticket_id": ticket.db_id, "participant_id": participant_id},
+                returning_col="ticket_id",
+            )
+        except Exception as e:
+            print(
+                f"Error occured when adding user with id {participant_id} into database. {e}"
+            )
 
     async def _update_participants_permissions(
         self,
@@ -191,7 +306,7 @@ class TicketManager:
         permission_updates = []
         member_updates = []
         for part_id in participants_id:
-            member = channel.guild.get_member(part_id)
+            member = await self.try_get_member(guild=channel.guild, member_id=part_id)
             if not member:
                 print(
                     f"Warning: Could not find member with ID {part_id} in guild {channel.guild.id} to update permissions."
@@ -226,18 +341,23 @@ class TicketManager:
         if not ticket:
             raise ChannelNotTicket
 
-        ticket_guild = self.bot.get_guild(ticket.guild_id)
-        # This uses the cache
+        ticket_guild = await self.try_get_guild(guild_id=ticket.guild_id)
 
         if not ticket_guild:
-            ticket_guild = await self.bot.fetch_guild(ticket.guild_id)
+            raise Exception(
+                "Guild cannot be found. Please check if the bot is in the guild."
+            )
 
-        ticket_channel = ticket_guild.get_channel(channel_id)
+        ticket_channel = await self.try_get_channel(
+            guild=ticket_guild, channel_id=channel_id
+        )
         if not isinstance(ticket_channel, TextChannel):
             raise Exception(
                 f"Ticket channel with channel id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
             )
-        current_participants = self.get_ticket_participants(ticket_id=ticket.db_id)
+        current_participants = await self.get_ticket_participants_id(
+            ticket_id=ticket.db_id
+        )
         current_participants = (
             set(current_participants) if current_participants else set()
         )
@@ -247,18 +367,18 @@ class TicketManager:
             allow_read=True,
             current_participants=current_participants,
         )
-        with self.database_manager as db:
-            data = [
-                {
-                    "ticket_id": ticket.db_id,
-                    "participant_id": participant_id,
-                }
-                for participant_id in member_to_add_to_db
-            ]
-            db.insert_many(
-                table_name=self.ticket_participants_table_name,
-                data=data,
-            )
+        data = [
+            {
+                "ticket_id": ticket.db_id,
+                "participant_id": participant_id,
+            }
+            for participant_id in member_to_add_to_db
+        ]
+        await self.database_manager.insert_many(
+            table_name=self.ticket_participants_table_name,
+            data=data,
+        )
+        self.ticket_caches[ticket.db_id].participants.union(member_to_add_to_db)
         return member_to_add_to_db
 
     async def remove_ticket_participants(
@@ -268,18 +388,23 @@ class TicketManager:
         if not ticket:
             raise ChannelNotTicket
 
-        ticket_guild = self.bot.get_guild(ticket.guild_id)
-        # This uses the cache
+        ticket_guild = await self.try_get_guild(guild_id=ticket.guild_id)
 
         if not ticket_guild:
-            ticket_guild = await self.bot.fetch_guild(ticket.guild_id)
+            raise Exception(
+                "Guild cannot be found. Please check if the bot is in the guild."
+            )
 
-        ticket_channel = ticket_guild.get_channel(channel_id)
+        ticket_channel = await self.try_get_channel(
+            guild=ticket_guild, channel_id=channel_id
+        )
         if not isinstance(ticket_channel, TextChannel):
             raise Exception(
                 f"Ticket channel with channel id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
             )
-        current_participants = self.get_ticket_participants(ticket_id=ticket.db_id)
+        current_participants = await self.get_ticket_participants_id(
+            ticket_id=ticket.db_id
+        )
         if not current_participants:
             raise Exception("No participants found for the ticket.")
         current_participants = set(current_participants)
@@ -290,44 +415,53 @@ class TicketManager:
             current_participants=current_participants,
         )
 
-        with self.database_manager as db:
-            db.delete(
-                table_name=self.ticket_participants_table_name,
-                criteria={
-                    "ticket_id": ticket.db_id,
-                    "participant_id": member_to_remove_from_db,
-                },
-            )
+        await self.database_manager.delete(
+            table_name=self.ticket_participants_table_name,
+            criteria={
+                "ticket_id": ticket.db_id,
+                "participant_id": member_to_remove_from_db,
+            },
+        )
+        self.ticket_caches[ticket.db_id].participants.difference_update(
+            member_to_remove_from_db
+        )
         return member_to_remove_from_db
 
     async def get_close_msg_id(self, channel_id: int) -> Union[int, None]:
         """Get the close message ID for a given channel ID."""
-        with self.database_manager as db:
-            result = db.select(
-                table_name=self.ticket_table_name,
-                criteria={"channel_id": channel_id},
-                fetch_one=True,
+        for ticket in self.ticket_caches.values():
+            if ticket.channel_id == channel_id:
+                return ticket.close_msg_id
+        result = await self.database_manager.select(
+            table_name=self.ticket_table_name,
+            criteria={"channel_id": channel_id},
+            fetch_one=True,
+        )
+        try:
+            assert result, "No ticket found for the given channel ID."
+            assert isinstance(result, dict)
+            return result["close_msg_id"]
+        except (AssertionError, KeyError):
+            print(
+                f"Error retrieving close message ID for channel {channel_id}: {result}"
             )
-            try:
-                assert result, "No ticket found for the given channel ID."
-                assert isinstance(result, dict)
-                return result["close_msg_id"]
-            except (AssertionError, KeyError):
-                print(
-                    f"Error retrieving close message ID for channel {channel_id}: {result}"
-                )
-                return None
+            return None
 
-    async def set_close_msg(
+    async def set_close_msg_id(
         self, channel_id: int, close_msg_id: int, close_msg_type: CloseMessageType
     ):
-        """Set the close message id and type for a given channel ID."""
-        with self.database_manager as db:
-            db.update(
-                table_name=self.ticket_table_name,
-                data={"close_msg_id": close_msg_id, "close_msg_type": close_msg_type},
-                criteria={"channel_id": channel_id},
-            )
+        """This function should only be called after validating the channel is a ticket.
+        Set the close message id and type for a given channel ID."""
+        ticket = await self.get_ticket(channel_id=channel_id)
+        assert ticket
+        ticket.close_msg_id = close_msg_id
+        ticket.close_msg_type = close_msg_type
+        self.ticket_caches[ticket.db_id] = ticket
+        await self.database_manager.update(
+            table_name=self.ticket_table_name,
+            data={"close_msg_id": close_msg_id, "close_msg_type": close_msg_type},
+            criteria={"channel_id": channel_id},
+        )
 
     async def create_ticket(
         self,
@@ -359,33 +493,45 @@ class TicketManager:
             embed=self.get_business_hours_embed(),
             view=close_view,
         )
-        with self.database_manager as db:
-            new_ticket_id = db.insert(
-                table_name=self.ticket_table_name,
-                data={
-                    "channel_id": new_channel.id,
-                    "auto_timeout": 48,
-                    "timed_out": 0,
-                    "close_msg_id": msg.id,
-                    "status": TicketStatus.OPEN,
-                    "ticket_type": TicketType(ticket_type),
-                    "guild_id": guild.id,
-                    "close_msg_type": CloseMessageType.CLOSE_TOGGLE,
-                },
-            )
-            # We just set it manually since creating a Ticket object here is meaningless.
-            await new_channel.edit(
-                name=f"{ticket_type}-{new_ticket_id:04d}-{TicketStatus.OPEN.string_repr}"
-            )
-            db.insert(
-                table_name=self.ticket_participants_table_name,
-                data={"ticket_id": new_ticket_id, "participant_id": user.id},
-                returning_col="ticket_id",
-            )
+        new_ticket_id = await self.database_manager.insert(
+            table_name=self.ticket_table_name,
+            data={
+                "channel_id": new_channel.id,
+                "auto_timeout": 48,
+                "timed_out": 0,
+                "close_msg_id": msg.id,
+                "status": TicketStatus.OPEN.id,
+                "ticket_type": TicketType(ticket_type),
+                "guild_id": guild.id,
+                "close_msg_type": CloseMessageType.CLOSE_TOGGLE,
+            },
+            returning_col="id",
+        )
+        self.ticket_caches[new_ticket_id] = Ticket(
+            db_id=new_ticket_id,
+            channel_id=new_channel.id,
+            auto_timeout=48,
+            timed_out=0,
+            close_msg_id=msg.id,
+            status=TicketStatus.OPEN,
+            ticket_type=TicketType(ticket_type),
+            guild_id=guild.id,
+            close_msg_type=CloseMessageType.CLOSE_TOGGLE,
+        )
+        # We just set it manually since creating a Ticket object here is meaningless.
+        await new_channel.edit(
+            name=f"{ticket_type}-{new_ticket_id:04d}-{TicketStatus.OPEN.string_repr}"
+        )
+        await self.database_manager.insert(
+            table_name=self.ticket_participants_table_name,
+            data={"ticket_id": new_ticket_id, "participant_id": user.id},
+            returning_col="ticket_id",
+        )
+        self.ticket_caches[new_ticket_id].participants.add(user.id)
 
         return new_channel
 
-    def _run_archive_exporter_sync(self, channel_id: int, temp_dir: str) -> str:
+    async def _run_archive_exporter_sync(self, channel_id: int, temp_dir: str) -> str:
         """
         A synchronous, blocking function that runs the chat exporter.
         This is designed to be run in an executor.
@@ -421,30 +567,24 @@ class TicketManager:
         ticket = await self.get_ticket(channel_id=channel.id)
         if not ticket:
             raise TicketNotFound
-        await self.set_ticket_status(
-            ticket=ticket, new_status=TicketStatus.CLOSED, ticket_channel=channel
-        )
+        await self.set_ticket_status(ticket=ticket, new_status=TicketStatus.CLOSED)
 
-        def _sync_update_and_select():
-            with self.database_manager as db:
-                db.update(
-                    table_name=self.ticket_table_name,
-                    data={"status": TicketStatus.CLOSED},
-                    criteria={"channel_id": channel.id},
-                )
-                # We can also fetch the participants in the same transaction
-                return db.select(
-                    "ticket_participants", criteria={"ticket_id": ticket.db_id}
-                )
+        async def _sync_update_and_select():
+            self.ticket_caches[ticket.db_id].status = TicketStatus.CLOSED
+            await self.database_manager.update(
+                table_name=self.ticket_table_name,
+                data={"status": TicketStatus.CLOSED.id},
+                criteria={"id": ticket.db_id},
+            )
+            # We can also fetch the participants in the same transaction
+            return await self.get_ticket_participants_id(ticket_id=ticket.db_id)
 
-        loop = asyncio.get_running_loop()
-        participants_id = await loop.run_in_executor(None, _sync_update_and_select)
+        participants_id = await _sync_update_and_select()
         customers_mention = ""
         customers: List[Union[User, Member]] = []
-        assert participants_id and isinstance(participants_id, list)
+        assert participants_id and isinstance(participants_id, set)
         cus_num = 0
-        for participant_id in participants_id:
-            part_id = participant_id["participant_id"]
+        for part_id in participants_id:
             member = channel.guild.get_member(part_id)
             if member:
                 await channel.set_permissions(target=member, read_messages=False)
@@ -461,15 +601,23 @@ class TicketManager:
         try:
             transcript_bytes: bytes
             with tempfile.TemporaryDirectory() as temp_dir:
-                transcript_path_str = await loop.run_in_executor(
-                    None, self._run_archive_exporter_sync, channel.id, temp_dir
+                transcript_path_str = await self._run_archive_exporter_sync(
+                    channel.id, temp_dir
                 )
-
                 transcript_path = pathlib.Path(transcript_path_str)
                 transcript_bytes = transcript_path.read_bytes()
                 filename = transcript_path.name
 
-            archive_channel = self.bot.get_channel(archive_channel_id)
+            archive_channel = await get_or_fetch(
+                container=self.bot,
+                obj_id=archive_channel_id,
+                get_method_name="get_channel",
+                fetch_method_name="fetch_channel",
+            )
+            if not archive_channel:
+                raise ChannelNotTicket(
+                    f"Archive channel with ID {archive_channel_id} not found."
+                )
             assert isinstance(archive_channel, TextChannel)
 
             UTC_to_GMT = timedelta(hours=8)
@@ -527,24 +675,27 @@ class TicketManager:
             raise FileNotFoundError("Error: DiscordChatExporter.Cli not found.")
 
     async def delete_ticket(self, channel: TextChannel):
-        with self.database_manager as db:
-            db.delete(
-                table_name=self.ticket_table_name, criteria={"channel_id": channel.id}
-            )
-            await channel.delete()
+        ticket = await self.get_ticket(channel_id=channel.id)
+        if not ticket:
+            raise ChannelNotTicket
+        # Delete the ticket from the cache
+        if ticket.db_id in self.ticket_caches.keys():
+            del self.ticket_caches[ticket.db_id]
+        await self.database_manager.delete(
+            table_name=self.ticket_table_name, criteria={"id": ticket.db_id}
+        )
+        await channel.delete()
 
     async def reopen_ticket(self, channel: TextChannel):
         ticket = await self.get_ticket(channel_id=channel.id)
         if not ticket:
             raise ChannelNotTicket
-        await self.set_ticket_status(
-            ticket=ticket, new_status=TicketStatus.OPEN, ticket_channel=channel
-        )
-        participants_id = self.get_ticket_participants(ticket_id=ticket.db_id)
+        await self.set_ticket_status(ticket=ticket, new_status=TicketStatus.OPEN)
+        participants_id = await self.get_ticket_participants_id(ticket_id=ticket.db_id)
         assert participants_id
         await self._update_participants_permissions(
             channel=channel,
-            participants_id=participants_id,
+            participants_id=list(participants_id),
             allow_read=True,
             current_participants=set(),
         )
@@ -553,58 +704,57 @@ class TicketManager:
         self,
         ticket: Ticket,
         new_status: TicketStatus,
-        guild: Optional[Guild] = None,
-        ticket_channel: Optional[TextChannel] = None,
-    ):
+    ) -> None:
+        """
+        This function sets the ticket's status to new_status.
+        Args:
+            ticket (Ticket): The ticket to be changed.
+            new_status (TicketStatus): The new status to be set.
+            guild (Optional[Guild]): The guild that the ticket is in.
+            ticket_channel (Optional[TextChannel]): The textchannel object of the ticket.
+        Raises:
+            discord.errors.NotFound, if the channel or the guild (the latter is unlikely) was deleted.
+            TicketNotFound, if the channel with the ticket's channel_id was not found in the guild.
+        Returns:
+            None, if everything works fine.
+        """
         if ticket.status == new_status:
             return
         ticket.status = new_status
-        with self.database_manager as db:
-            db.update(
-                table_name=self.ticket_table_name,
-                data={"status": new_status.value},
-                criteria={"id": ticket.db_id},
-            )
-        await self.set_ticket_channel_name(
-            ticket=ticket, guild=guild, ticket_channel=ticket_channel
+        await self.database_manager.update(
+            table_name=self.ticket_table_name,
+            data={"status": new_status.id},
+            criteria={"id": ticket.db_id},
         )
+        self.ticket_caches[ticket.db_id] = ticket
+        try:
+            await self.set_ticket_channel_name(ticket=ticket)
+        except TicketNotFound as e:
+            print(
+                f"Error: {e}. The channel with the ticket's channel_id was not found in the guild."
+            )
+            raise e
 
     async def set_ticket_channel_name(
         self,
         ticket: Ticket,
-        guild: Optional[Guild] = None,
-        ticket_channel: Optional[TextChannel] = None,
-    ):
+    ) -> None:
         """
         This fucntion sets the ticket's channel name with format : {ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}, where status_name = ticket_status_name_chinese.get(ticket.status).
         Args:
             ticket (Ticket): The ticket to be changed.
-            guild (Optional[Guild]): The guild that the ticket is in.
-            ticket_channel (Optional[TextChannel]): The textchannel object of the ticket.
-
-        Notes:
-            If guild or ticket_channel has a mismatch with the provided ticket infomation, we will try fix that.
 
         Raises:
-            discord.errors.NotFound, if the channel or the guild (the latter is unlikely) was deleted.
+            TicketNotFound, if the channel with the ticket's channel_id was not found in the guild.
         Returns:
             None, if everything works fine.
         """
-        if not ticket_channel or ticket_channel.id != ticket.channel_id:
-            # This means a mismatch or ticket_channel is not given, so we have to get it ourselves.
-            # We do the computation if guild is not given or the guild is given but is mismatched
-            if not guild or (guild and guild.id != ticket.guild_id):
-                guild = self.bot.get_guild(ticket.guild_id)
-                if not guild:
-                    guild = await self.bot.fetch_guild(ticket.guild_id)
-
-            ticket_cnl_temp = guild.get_channel(ticket.channel_id)
-            if not ticket_channel:
-                ticket_cnl_temp = await guild.fetch_channel(ticket.channel_id)
-            assert isinstance(ticket_cnl_temp, TextChannel)
-            ticket_channel = ticket_cnl_temp
-
-        # We pray for cache hit everytime.
+        ticket_channel = await self.try_get_channel_by_bot(channel_id=ticket.channel_id)
+        if not ticket_channel:
+            raise TicketNotFound(
+                f"Ticket channel with ID {ticket.channel_id} not found in the guild with ID {ticket.guild_id}."
+            )
+        assert isinstance(ticket_channel, TextChannel)
         status_name = ticket.status.string_repr
         await ticket_channel.edit(
             name=f"{ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}"
