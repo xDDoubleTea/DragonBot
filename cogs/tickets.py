@@ -19,7 +19,7 @@ from config.constants import (
 )
 from config.models import CloseMessageType, TicketStatus
 from config.canned_response import CANNED_RESPONSES
-from core.exceptions import ChannelNotTicket, NoParticipants
+from core.exceptions import ChannelNotTicket, NoParticipants, TicketNotFound
 from core.ticket_manager import TicketManager
 from utils.embed_utils import create_themed_embed
 from view.ticket_views import (
@@ -40,11 +40,9 @@ class tickets(Cog):
 
     @Cog.listener(name="on_ready")
     async def on_ready(self):
-        with self.ticket_manager.database_manager as db:
-            all_panels = db.select(
-                table_name=self.ticket_manager.ticket_panels_table_name
-            )
-            all_tickets = db.select(table_name="tickets")
+        all_panels = await self.ticket_manager.database_manager.select(
+            table_name=self.ticket_manager.ticket_panels_table_name
+        )
         print("Restoring ticket panels....")
         if not all_panels:
             print("No ticket panels found in the database.")
@@ -78,14 +76,19 @@ class tickets(Cog):
                     print(
                         f"Could not find message with ID {message_id}. Deleting panel record."
                     )
-                    with self.ticket_manager.database_manager as db:
-                        db.delete("ticket_panels", {"guild_id": guild_id})
+                    await self.ticket_manager.database_manager.delete(
+                        "ticket_panels", {"guild_id": guild_id}
+                    )
                 except Exception as e:
                     print(
                         f"An error occurred while re-attaching view for guild {guild_id}: {e}"
                     )
         print("Done!")
+
         print("Restoring all close buttons...")
+        all_tickets = await self.ticket_manager.database_manager.select(
+            table_name="tickets"
+        )
         if not all_tickets:
             print("No tickets found in database, skipping...")
         else:
@@ -117,13 +120,33 @@ class tickets(Cog):
                 channel = guild.get_channel(channel_id)
                 if not channel or not isinstance(channel, TextChannel):
                     # The channel has been deleted, so we can remove the ticket from the database.
-                    deleted_tickets_id.append(ticket.db_id)
-                    continue
+                    try:
+                        channel = await guild.fetch_channel(channel_id)
+                        if not isinstance(channel, TextChannel):
+                            raise TicketNotFound(
+                                f"Channel with ID {channel_id} is not a TextChannel."
+                            )
+                    except discord.errors.NotFound:
+                        print(
+                            f"Could not find the channel with id {channel_id} in guild {guild_id}. Deleting ticket from database."
+                        )
+                        await self.ticket_manager.database_manager.delete(
+                            table_name="tickets", criteria={"id": ticket.db_id}
+                        )
+                        deleted_tickets_id.append(ticket.db_id)
+                        continue
+                    except TicketNotFound as e:
+                        print(f"Error: {e}. Deleting ticket from database.")
+                        await self.ticket_manager.database_manager.delete(
+                            table_name="tickets", criteria={"id": ticket.db_id}
+                        )
+                        deleted_tickets_id.append(ticket.db_id)
+                        continue
                 try:
                     message = await channel.fetch_message(close_msg_id)
                     print(f"Restoring close buttons in ticket with id {ticket.db_id}")
                     view = close_view[CloseMessageType(close_msg_type)](
-                        ticket_manager=self.ticket_manager
+                        ticket_manager=self.ticket_manager,
                     )
                     await message.edit(view=view)
                     print(f"Setting channel name for ticket with id {ticket.db_id}")
@@ -140,8 +163,9 @@ class tickets(Cog):
                 except Exception as e:
                     print("Error: ", e)
             for ticket_id in deleted_tickets_id:
-                with self.ticket_manager.database_manager as db:
-                    db.delete(table_name="tickets", criteria={"id": ticket_id})
+                await self.ticket_manager.database_manager.delete(
+                    table_name="tickets", criteria={"id": ticket_id}
+                )
         print("Done!")
 
     @staticmethod
@@ -221,30 +245,28 @@ class tickets(Cog):
     async def on_guild_channel_delete(self, channel):
         if not isinstance(channel, TextChannel):
             return
-        with self.ticket_manager.database_manager as db:
-            delete_cnl = db.select(
+        delete_cnl = await self.ticket_manager.database_manager.select(
+            table_name=self.ticket_manager.ticket_panels_table_name,
+            criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
+            fetch_one=True,
+        )
+        if delete_cnl:
+            await self.ticket_manager.database_manager.delete(
                 table_name=self.ticket_manager.ticket_panels_table_name,
                 criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
-                fetch_one=True,
             )
-            if delete_cnl:
-                db.delete(
-                    table_name=self.ticket_manager.ticket_panels_table_name,
-                    criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
-                )
-                assert isinstance(delete_cnl, dict)
-                message_id = delete_cnl["message_id"]
-                if message_id in self.panel_message_ids:
-                    self.panel_message_ids.remove(message_id)
+            assert isinstance(delete_cnl, dict)
+            message_id = delete_cnl["message_id"]
+            if message_id in self.panel_message_ids:
+                self.panel_message_ids.remove(message_id)
 
     @Cog.listener(name="on_message_delete")
     async def on_message_delete(self, message):
         if message.id in self.panel_message_ids:
-            with self.ticket_manager.database_manager as db:
-                db.delete(
-                    table_name=self.ticket_manager.ticket_panels_table_name,
-                    criteria={"message_id": message.id},
-                )
+            await self.ticket_manager.database_manager.delete(
+                table_name=self.ticket_manager.ticket_panels_table_name,
+                criteria={"message_id": message.id},
+            )
 
             self.panel_message_ids.remove(message.id)
 
@@ -316,52 +338,46 @@ class tickets(Cog):
         await interaction.response.defer(thinking=True, ephemeral=False)
         try:
             assert isinstance(cmd_channel, TextChannel)
-            with self.ticket_manager.database_manager as db:
-                panel = db.select(
-                    table_name=self.ticket_manager.ticket_panels_table_name,
-                    criteria={"guild_id": interaction.guild.id},
-                    fetch_one=True,
-                )
-                if panel:
-                    assert isinstance(panel, dict)
-                    panel_cnl = interaction.guild.get_channel(panel["channel_id"])
-                    assert isinstance(panel_cnl, TextChannel)
-                    try:
-                        panel_msg = await panel_cnl.fetch_message(panel["message_id"])
-                        return await interaction.followup.send(
-                            content=f"There should only exist one open message for each guild. The url of the open message in your guild is {panel_msg.jump_url}"
-                        )
-                    except discord.errors.NotFound:
-                        db.delete(
-                            table_name=self.ticket_manager.ticket_panels_table_name,
-                            criteria={"message_id": panel["message_id"]},
-                        )
+            panel = await self.ticket_manager.database_manager.select(
+                table_name=self.ticket_manager.ticket_panels_table_name,
+                criteria={"guild_id": interaction.guild.id},
+                fetch_one=True,
+            )
+            if panel:
+                assert isinstance(panel, dict)
+                panel_cnl = interaction.guild.get_channel(panel["channel_id"])
+                assert isinstance(panel_cnl, TextChannel)
+                try:
+                    panel_msg = await panel_cnl.fetch_message(panel["message_id"])
+                    return await interaction.followup.send(
+                        content=f"There should only exist one open message for each guild. The url of the open message in your guild is {panel_msg.jump_url}"
+                    )
+                except discord.errors.NotFound:
+                    view = TicketCreationView(ticket_manager=self.ticket_manager)
+                    embed = create_themed_embed(
+                        title="【DRAGON龍龍】客服專區",
+                        description="請點下方按鈕開啟客服頻道，點擊後會開啟一個只有您跟客服人員才看的到的私人頻道，即可至開啟的頻道傳送訊息，謝謝您。",
+                    )
+                    embed.url = "https://dragonshop.org/"
+                    embed.set_image(url="https://i.imgur.com/AgKFvBT.png")
+                    await interaction.followup.send(
+                        content=ticket_system_main_message(
+                            role=cus_service_role, cmd_channel=cmd_channel
+                        ),
+                        view=view,
+                        embed=embed,
+                    )
+                    msg = await interaction.original_response()
+                    await self.ticket_manager.database_manager.update(
+                        table_name=self.ticket_manager.ticket_panels_table_name,
+                        data={
+                            "channel_id": interaction.channel_id,
+                            "message_id": msg.id,
+                        },
+                        criteria={"guild_id": interaction.guild_id},
+                    )
+                    self.panel_message_ids.add(msg.id)
 
-                view = TicketCreationView(ticket_manager=self.ticket_manager)
-                embed = create_themed_embed(
-                    title="【DRAGON龍龍】客服專區",
-                    description="請點下方按鈕開啟客服頻道，點擊後會開啟一個只有您跟客服人員才看的到的私人頻道，即可至開啟的頻道傳送訊息，謝謝您。",
-                )
-                embed.url = "https://dragonshop.org/"
-                embed.set_image(url="https://i.imgur.com/AgKFvBT.png")
-                await interaction.followup.send(
-                    content=ticket_system_main_message(
-                        role=cus_service_role, cmd_channel=cmd_channel
-                    ),
-                    view=view,
-                    embed=embed,
-                )
-                msg = await interaction.original_response()
-                db.insert(
-                    table_name=self.ticket_manager.ticket_panels_table_name,
-                    data={
-                        "guild_id": interaction.guild_id,
-                        "channel_id": interaction.channel_id,
-                        "message_id": msg.id,
-                    },
-                    returning_col="message_id",
-                )
-                self.panel_message_ids.add(msg.id)
         except AssertionError:
             return await interaction.followup.send(
                 content="Please try again.", ephemeral=True
