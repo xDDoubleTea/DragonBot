@@ -93,7 +93,7 @@ class KeywordManager:
             in_ticket_only: Whether it's restricted to ticket channels.
             guild_id: The guild this keyword belongs to.
             allowed_channel_ids: An optional list of channel IDs where it can trigger.
-
+            mention_participants:  Do the keyword mentions participants in ticket channel.
         Returns:
             The newly created, fully hydrated Keyword object.
         """
@@ -217,7 +217,7 @@ class KeywordManager:
         Retrieves the allowed channels for a keyword.
         Args:
             trigger: The keyword trigger to fetch channels for.
-            guild_id: The guild this keyword belongs to.
+            guild: The guild this keyword belongs to.
         Returns:
             List of channel of type discord.TextChannel where this keyword is allowed.
         """
@@ -254,39 +254,3 @@ class KeywordManager:
         ]
         self.keyword_cache[trigger] = keyword
         return keyword
-
-    async def fetch_keyword(self, trigger: str) -> Keyword:
-        keyword_data = await self.database_manager.select(
-            table_name=self.keywords_table_name,
-            criteria={"trigger": trigger},
-            fetch_one=True,
-        )
-        if not keyword_data:
-            raise
-        assert isinstance(keyword_data, dict)
-        return Keyword(
-            id=keyword_data["id"],
-            trigger=keyword_data["trigger"],
-            response=keyword_data["response"],
-            kw_type=keyword_data["kw_type"],
-            in_ticket_only=keyword_data["in_ticket_only"],
-            guild_id=keyword_data["guild_id"],
-            mention_participants=keyword_data["mention_participants"],
-        )
-
-    async def get_keyword(self, trigger: str) -> Union[Keyword, None]:
-        """
-        This function uses keyword cache first, and uses fetch_keyword if cache miss.
-        """
-        keyword = self.keyword_cache.get(trigger)
-        if not keyword:
-            try:
-                keyword = await self.fetch_keyword(trigger)
-                if not keyword:
-                    return None
-                # Update the cache with the fetched keyword
-                self.keyword_cache[trigger] = keyword
-                return keyword
-            except Exception as e:
-                print(f"Error fetching keyword with {trigger}: {e}")
-                return None

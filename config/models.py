@@ -11,12 +11,15 @@ __all__ = [
     "KeywordType",
     "TicketType",
     "AddRemove",
-    "BooleanToStr",
-    "StrToBoolean",
+    "boolean_to_str",
+    "str_to_boolean",
     "PaginationViewButtonLayouts",
     "BasePaginationMetaData",
     "KeywordPaginationMetaData",
     "Keyword",
+    "RoleRequestStatus",
+    "RoleRequestChannelType",
+    "RoleRequestData",
 ]
 
 
@@ -79,17 +82,21 @@ class CloseMessageType(IntEnum):
     AFTER_CLOSE = 2
 
 
-def BooleanToStr(value: bool) -> str:
+def boolean_to_str(value: bool) -> str:
     """
     Converts a boolean value to a string representation.
+    :param value:
+    :return:
     """
     return "是" if value else "否"
 
 
-def StrToBoolean(value: str) -> Optional[bool]:
+def str_to_boolean(value: str) -> Optional[bool]:
     """
     Converts a string representation of a boolean to a boolean value.
     Returns None if the value is not "是" or "否".
+    :param value:
+    :return:
     """
     return True if value == "是" else False if value == "否" else None
 
@@ -105,7 +112,7 @@ class AddRemove(StrEnum):
 
 class KeywordType(StrEnum):
     """
-    Represents the type of a keyword.
+    Represents the type of keyword.
     """
 
     MATCH_START = "句首"
@@ -114,7 +121,7 @@ class KeywordType(StrEnum):
 
 class TicketType(StrEnum):
     """
-    Represents the type of a ticket.
+    Represents the type of ticket.
     """
 
     PURCHASE = "代購"
@@ -194,6 +201,7 @@ class Ticket:
     ticket_type: TicketType
     guild_id: int
     close_msg_type: CloseMessageType
+    participants: Set[int] = field(default_factory=set)
 
 
 @dataclass
@@ -202,3 +210,14 @@ class RoleRequestData:
     request_channel_id: Optional[int]
     approval_channel_id: Optional[int]
     requestable_roles: Set[int]
+
+
+@dataclass
+class PanelMessageData:
+    """
+    Represents the data for a panel message.
+    """
+
+    guild_id: int
+    channel_id: int
+    message_id: int

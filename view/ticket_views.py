@@ -51,7 +51,7 @@ class QuestionModal(Modal):
             new_channel = await self.ticket_manager.create_ticket(
                 user=interaction.user,
                 guild=interaction.guild,
-                ticket_type=self.ticket_type.value,
+                ticket_type=self.ticket_type,
                 close_view=TicketCloseToggleView(self.ticket_manager),
             )
 
@@ -151,7 +151,7 @@ class TicketCloseToggleView(View):
             view=TicketCloseView(ticket_manager=self.ticket_manager),
         )
         msg = await interaction.original_response()
-        await self.ticket_manager.set_close_msg(
+        await self.ticket_manager.set_close_msg_id(
             channel_id=interaction.channel.id,
             close_msg_id=msg.id,
             close_msg_type=CloseMessageType.CLOSE,
@@ -179,10 +179,11 @@ class TicketCloseView(View):
             )
             view = TicketAfterClose(ticket_manager=self.ticket_manager)
             await interaction.followup.send(
-                content="頻道已關閉。接下來你想要？", view=view
+                content=f"頻道已被{interaction.user.mention}關閉。接下來你想要？",
+                view=view,
             )
             msg = await interaction.original_response()
-            await self.ticket_manager.set_close_msg(
+            await self.ticket_manager.set_close_msg_id(
                 channel_id=interaction.channel.id,
                 close_msg_id=msg.id,
                 close_msg_type=CloseMessageType.AFTER_CLOSE,
@@ -204,7 +205,7 @@ class TicketCloseView(View):
         await interaction.response.send_message(
             content="關閉頻道已取消。", ephemeral=True
         )
-        await self.ticket_manager.set_close_msg(
+        await self.ticket_manager.set_close_msg_id(
             channel_id=interaction.channel.id,
             close_msg_id=interaction.message.id,
             close_msg_type=CloseMessageType.CLOSE_TOGGLE,
@@ -233,7 +234,7 @@ class TicketAfterClose(View):
         msg = await interaction.original_response()
         assert interaction.message
         await interaction.message.edit(view=None)
-        await self.ticket_manager.set_close_msg(
+        await self.ticket_manager.set_close_msg_id(
             channel_id=interaction.channel.id,
             close_msg_id=msg.id,
             close_msg_type=CloseMessageType.CLOSE_TOGGLE,
