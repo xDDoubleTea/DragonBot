@@ -56,6 +56,7 @@ class DragonBot(commands.Bot):
         print("Initializing role request data cache")
         await self.role_request_manager.init_cache()
         print("Role request data cache initialized")
+        await self.ticket_manager.init_cache()
         for cog in filter(
             lambda file: file.endswith(".py"),
             os.listdir("./cogs"),

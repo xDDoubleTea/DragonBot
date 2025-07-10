@@ -19,7 +19,7 @@ class ReplyKeys(Enum):
     FAQ_LINK = "常見問題Q&A: https://dragonshop.org/faq/"
     WEBSITE_LINK = "官網: https://dragonshop.org/"
     CUSTOM_ORDER_LINK = "自定義代購: https://dragonshop.org/product/%E8%87%AA%E5%AE%9A%E7%BE%A9%E4%BB%A3%E8%B3%BC/"
-    PAYMENT_TURTORIAL = "超商付款教學: https://dragonshop.org/convenience-store/"
+    PAYMENT_TUTORIAL = "超商付款教學: https://dragonshop.org/convenience-store/"
 
 
 CANNED_RESPONSES: dict[ReplyKeys, CannedResponse] = {
@@ -51,7 +51,7 @@ CANNED_RESPONSES: dict[ReplyKeys, CannedResponse] = {
     ReplyKeys.CUSTOM_ORDER_LINK: CannedResponse(
         text="自定義代購: https://dragonshop.org/product/%E8%87%AA%E5%AE%9A%E7%BE%A9%E4%BB%A3%E8%B3%BC/"
     ),
-    ReplyKeys.PAYMENT_TURTORIAL: CannedResponse(
+    ReplyKeys.PAYMENT_TUTORIAL: CannedResponse(
         text="超商付款教學: https://dragonshop.org/convenience-store/"
     ),
 }
