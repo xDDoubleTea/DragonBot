@@ -93,7 +93,7 @@ class KeywordManager:
             in_ticket_only: Whether it's restricted to ticket channels.
             guild_id: The guild this keyword belongs to.
             allowed_channel_ids: An optional list of channel IDs where it can trigger.
-
+            mention_participants:  Do the keyword mentions participants in ticket channel.
         Returns:
             The newly created, fully hydrated Keyword object.
         """
@@ -217,7 +217,7 @@ class KeywordManager:
         Retrieves the allowed channels for a keyword.
         Args:
             trigger: The keyword trigger to fetch channels for.
-            guild_id: The guild this keyword belongs to.
+            guild: The guild this keyword belongs to.
         Returns:
             List of channel of type discord.TextChannel where this keyword is allowed.
         """
@@ -290,3 +290,4 @@ class KeywordManager:
             except Exception as e:
                 print(f"Error fetching keyword with {trigger}: {e}")
                 return None
+        return None

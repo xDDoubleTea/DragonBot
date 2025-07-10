@@ -14,7 +14,7 @@ from discord.ext.commands import Cog
 from config.constants import THEME_COLOR
 from config.models import (
     AddRemove,
-    BooleanToStr,
+    boolean_to_str,
     Keyword,
     KeywordType,
     KeywordPaginationMetaData,
@@ -27,7 +27,7 @@ from view.keyword_views import KeywordChange, KeywordChangeModal
 from view.pagination_view import KeywordPaginationView
 
 
-class keyword(Cog):
+class KeywordCog(Cog):
     def __init__(
         self,
         bot: commands.Bot,
@@ -77,7 +77,7 @@ class keyword(Cog):
         for trigger, keyword in all_keywords.items():
             if not keyword.is_allowed_in(
                 channel_id=message.channel.id,
-                is_ticket_channel=self.ticket_manger.is_ticket_channel(
+                is_ticket_channel=await self.ticket_manger.is_ticket_channel(
                     channel_id=message.channel.id
                 ),
             ):
@@ -284,7 +284,7 @@ class keyword(Cog):
             embed.add_field(
                 name=f"**關鍵字**：{keyword.trigger}",
                 value=f"""
-                回覆：{keyword.response}，類型：{keyword.kw_type.value}，只在客服頻道中觸發：{BooleanToStr(keyword.in_ticket_only)}，在客服頻道中tag客戶：{BooleanToStr(keyword.mention_participants)}
+                回覆：{keyword.response}，類型：{keyword.kw_type.value}，只在客服頻道中觸發：{boolean_to_str(keyword.in_ticket_only)}，在客服頻道中tag客戶：{boolean_to_str(keyword.mention_participants)}
                 可觸發頻道：{", ".join(map(lambda cnl: cnl.mention, keyword_metadata.keyword_channel_obj.get(keyword.trigger, []))) if not keyword.in_ticket_only else "只在客服頻道中觸發"}""",
                 inline=False,
             )
@@ -371,7 +371,7 @@ class keyword(Cog):
 
 async def setup(client: DragonBot):
     await client.add_cog(
-        keyword(
+        KeywordCog(
             bot=client,
             keyword_manager=client.keyword_manager,
             ticket_manager=client.ticket_manager,
