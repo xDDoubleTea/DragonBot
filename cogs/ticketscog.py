@@ -38,8 +38,7 @@ class tickets(Cog):
         self.ticket_manager = ticket_manager
         self.panel_message_ids = set()
 
-    @Cog.listener(name="on_ready")
-    async def on_ready(self):
+    async def restore_ticket_panel(self):
         all_panels = await self.ticket_manager.database_manager.select(
             table_name=self.ticket_manager.ticket_panels_table_name
         )
@@ -85,6 +84,9 @@ class tickets(Cog):
                     )
         print("Done!")
 
+    @Cog.listener(name="on_ready")
+    async def on_ready(self):
+        await self.restore_ticket_panel()
         print("Restoring all close buttons...")
         all_tickets = await self.ticket_manager.database_manager.select(
             table_name="tickets"
