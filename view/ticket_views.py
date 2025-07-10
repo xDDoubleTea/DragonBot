@@ -51,7 +51,7 @@ class QuestionModal(Modal):
             new_channel = await self.ticket_manager.create_ticket(
                 user=interaction.user,
                 guild=interaction.guild,
-                ticket_type=self.ticket_type.value,
+                ticket_type=self.ticket_type,
                 close_view=TicketCloseToggleView(self.ticket_manager),
             )
 
