@@ -11,7 +11,7 @@ This project reflects my journey in software design, moving from a monolithic sc
 - 🎟️ **Ticket System:** A comprehensive ticket management system allowing users to create, manage, and close support tickets through dedicated channels.
 - 👑 **Role Requesting System:** A configurable system for users to request roles, with an approval workflow for administrators.
 - 🔑 **Keyword System:** An automated response system that replies to user-defined keywords and triggers.
-- ...and more utilities designed to improve server management.
+- ...and more utilities designed to improve server management (To be added).
 
 ## Setup & Installation (Self-Hosting)
 
@@ -66,6 +66,7 @@ This guide is for developers who wish to self-host the bot.
     ```
 
     Next, edit the `.env` file with your own values, including your bot token and database URL.
+    **Remember to change the configuration in `config/` to match your server's configuration, such as the guild ID, support role ID, and other settings. Or the bot won't work**
 
 5. **Run the bot**
 
@@ -82,3 +83,8 @@ This guide is for developers who wish to self-host the bot.
 - **Database:** PostgreSQL with `asyncpg`
 - **ORM:** SQLAlchemy
 - **Documentation:** MkDocs
+
+## Contributing
+
+Fork the repository, create a new branch, and submit a pull request. Contributions are welcome!  
+Recommend to read the [contribution guide](CONTRIBUTING.md) for more details. You can also first open an issue to discuss your changes.  

@@ -74,7 +74,7 @@ class misc(Cog):
                 "台灣銀行爬蟲網站爆炸了...", ephemeral=True
             )
         amount *= currency
-
+        # TODO: Make this configurable
         if amount < 200:
             output = amount + 30
         elif 200 <= amount < 500:
