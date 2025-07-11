@@ -20,19 +20,11 @@ __all__ = [
     "feedback_channel_id",
     "app_id",
     "MY_GUILD",
-    "NOT_REQUESTABLE_ROLES_ID",
     "DS01",
     "DISCORD_EMOJI",
     "ticket_system_main_message",
     "app_mode",
     "db_url",
-    "all_cmds",
-    "channel_cmds",
-    "key_cmds",
-    "money_cmds",
-    "online_cmds",
-    "monitor_cmds",
-    "game_cmds",
     "admin_role_id",
     "epic_dragon_role_id",
     "rare_dragon_role_id",
@@ -107,15 +99,6 @@ MY_GUILD = (
 
 currency_information_url = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
 
-NOT_REQUESTABLE_ROLES_ID = [
-    584419521692172316,
-    446617195049517056,
-    740487435015946271,
-    460120371476037633,
-    446617194743201792,
-    856792148060667934,
-]
-
 DS01 = "<:ds01:894967438733606943>"
 DISCORD_EMOJI = "<:discord:934326257699663872>"
 
@@ -130,38 +113,11 @@ def ticket_system_main_message(role: Role, cmd_channel: TextChannel):
 一直Tag或問號，客服人員非一直盯著訊息看，我們人在時會依開單順序一一回答各位的問題，如營業時間內每30分鐘未回覆再Tag一遍 {role.mention} \
 ，感謝您的配合
 4.如您的問題已解決，請自行點擊按鈕關閉客服頻道，如客服人員詢問24小時未回覆或自行關閉，將由客服人員關閉
-6.請不要 私訊、加客服好友 問問題，我們不會在私訊回覆問題!請利用本客服系統開啟的私人頻道，並請認明有 {role.mention}\
+5.請不要 私訊、加客服好友 問問題，我們不會在私訊回覆問題!請利用本客服系統開啟的私人頻道，並請認明有 {role.mention}\
 身分組才是我們的官方客服人員
-7.自定義代購美元、歐元匯率轉換可先至 {cmd_channel.mention}
+6.自定義代購美元、歐元匯率轉換可先至 {cmd_channel.mention}
 進行試算參考，詳細以客服人員報價為準
 {DS01}一般問題麻煩先參閱 常見問答集FAQ: https://dragonshop.org/faq/ 無法解答再開單{DS01}
 ```營業時間:\n【暑期】每日下午1點至晚上12點
 如有臨時異動會在公告通知```
     """
-
-
-all_cmds = [
-    "New",
-    "scs",
-    "close",
-    "key",
-    "keyrm",
-    "keylist",
-    "keywordslist",
-    "add_cus",
-    "rm_cus",
-    "money",
-    "money_list",
-    "add_money",
-    "set_online",
-    "now_online",
-    "cpu",
-    "ram",
-    "game",
-]
-channel_cmds = ["New", "scs", "close", "add_cus", "rm_cus", "set_cnl_close"]
-key_cmds = ["key", "keyrm", "keylist", "keywordslist"]
-money_cmds = ["money", "money_list", "add_money"]
-online_cmds = ["set_online", "now_online"]
-monitor_cmds = ["cpu", "ram"]
-game_cmds = ["game"]

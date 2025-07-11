@@ -5,6 +5,11 @@ import asyncpg
 
 
 class DatabaseManager:
+    """
+    A simple database manager for PostgreSQL using psycopg2.
+    Since discord.py is built on top of asyncio, it is not recommended to use this if you want the maximum performance.
+    """
+
     def __init__(self, database_url: str):
         if not database_url:
             raise ValueError("Database URL cannot be empty.")
