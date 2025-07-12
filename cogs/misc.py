@@ -12,7 +12,6 @@ from core.ticket_manager import TicketManager
 from main import DragonBot
 from utils.checks import IsNotDev, is_me_app_command, is_me_command
 from utils.discord_utils import try_get_channel_by_bot
-from decimal import Decimal
 
 
 class misc(Cog):
