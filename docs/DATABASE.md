@@ -24,7 +24,7 @@
 | auto_timeout   | INT         | DEFAULT 48               | The auto timeout time for the ticket                      |
 | timed_out      | INT         | \[0,1\] DEFAULT 0        | Determines if the ticket has timed out                    |
 | close_msg_id   | numeric(30) | NOT NULL                 | The message id where the close channel button is attached |
-| close_msg_type | numeric(30) | NOT NULL                 | The close message type                                    |
+| close_msg_type | numeric(30) | NOT NULL \[0,1,2\]       | The close message type                                    |
 | status         | INT         | \[0,1,2,3\]              | The ticket status                                         |
 | guild_id       | numeric(30) | NOT NULL                 | The guild id where the ticket is located                  |
 | ticket_type    | VARCHAR     | \["代購","群組","其他"\] | The ticket type                                           |
@@ -32,11 +32,33 @@
 Note: The TicketStatus enum is defined as
 
 ```python
-TicketStatus(Enum):
-  OPEN=0
-  IN_PROGRESS=1
-  RESOLVED=2
-  CLOSED=3
+class TicketStatus(Enum):
+    """
+    Represents the status of a ticket
+    """
+
+    OPEN = (0, "待處理")
+    IN_PROGRESS = (1, "處理中")
+    RESOLVED = (2, "處理完畢")
+    CLOSED = (3, "已關閉")
+
+    def __init__(self, id: int, string_repr: str):
+        self.id = id
+        self.string_repr = string_repr
+
+    @classmethod
+    def from_id(cls, status_id: int) -> "TicketStatus":
+        """
+        Looks up an enum member by its integer ID.
+        Returns the TicketStatus member or None if the ID is not found.
+        """
+        # This is an efficient reverse lookup.
+        # We iterate through all members of the class (`cls`) and check their `id` attribute.
+        for member in cls:
+            if member.id == status_id:
+                return member
+        return cls.OPEN  # Defaults to OPEN if no match is found, for safety.
+
 ```
 
 ### Ticket Participants
