@@ -17,16 +17,17 @@
 - Table name: `tickets`
 - Purpose: Stores the primary state and metadata for each customer support ticket channel.
 
-| Column Name  | Data Type   | Constraints | Description                                               |
-|:-------------|:------------|:------------|:----------------------------------------------------------|
-| id           | SERIAL      | PRIMARY KEY | The ticket id                                             |
-| channel_id   | numeric(30) | NOT NULL    | The discord channel id for the ticket                     |
-| auto_timeout | INT         | DEFAULT 48  | The auto timeout time for the ticket                      |
-| timed_out    | INT         | \[0,1\] DEFAULT 0     | Determines if the ticket has timed out                    |
-| close_msg_id | numeric(30) | NOT NULL    | The message id where the close channel button is attached |
-| close_msg_type | numeric(30) | NOT NULL    | The message id where the close channel button is attached |
-| status       | INT         | \[0,1,2,3\] | The ticket status                                         |
-| guild_id     | numeric(30) | NOT NULL    | The guild id where the ticket is located                  |
+| Column Name    | Data Type   | Constraints              | Description                                               |
+|:---------------|:------------|:-------------------------|:----------------------------------------------------------|
+| id             | SERIAL      | PRIMARY KEY              | The ticket id                                             |
+| channel_id     | numeric(30) | NOT NULL                 | The discord channel id for the ticket                     |
+| auto_timeout   | INT         | DEFAULT 48               | The auto timeout time for the ticket                      |
+| timed_out      | INT         | \[0,1\] DEFAULT 0        | Determines if the ticket has timed out                    |
+| close_msg_id   | numeric(30) | NOT NULL                 | The message id where the close channel button is attached |
+| close_msg_type | numeric(30) | NOT NULL                 | The close message type                                    |
+| status         | INT         | \[0,1,2,3\]              | The ticket status                                         |
+| guild_id       | numeric(30) | NOT NULL                 | The guild id where the ticket is located                  |
+| ticket_type    | VARCHAR     | \["代購","群組","其他"\] | The ticket type                                           |
 
 Note: The TicketStatus enum is defined as
 
