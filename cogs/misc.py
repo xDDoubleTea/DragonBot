@@ -2,7 +2,7 @@ from bs4.element import NavigableString, PageElement
 from discord.ext.commands import Bot, Cog, CommandError, Context
 from discord.ext import commands
 from discord import app_commands, Interaction
-from discord.abc import GuildChannel
+from discord.abc import GuildChannel, Messageable
 from typing import Literal, Union, Optional
 import requests
 import bs4
@@ -10,7 +10,9 @@ from config.constants import currency_information_url
 from core.keyword_manager import KeywordManager
 from core.ticket_manager import TicketManager
 from main import DragonBot
-from utils.checks import IsNotDev, is_me_command
+from utils.checks import IsNotDev, is_me_app_command, is_me_command
+from utils.discord_utils import try_get_channel_by_bot
+from decimal import Decimal
 
 
 class misc(Cog):
@@ -116,10 +118,45 @@ class misc(Cog):
         )
 
     @app_commands.command(name="say", description="Say a message")
+    @is_me_app_command()
     async def say(
-        self, interaction: Interaction, message: str, channel: Optional[GuildChannel]
+        self,
+        interaction: Interaction,
+        message: str,
+        channel: Optional[GuildChannel],
+        channel_id: Optional[str],
     ):
-        pass
+        if (
+            not channel and not interaction.channel and not channel_id
+        ) or not interaction.channel:
+            return await interaction.response.send_message(
+                "Provide a channel or use this command in a channel.", ephemeral=True
+            )
+        try:
+            if isinstance(channel, Messageable):
+                await channel.send(content=message)
+            elif channel_id:
+                if (
+                    channel := await try_get_channel_by_bot(
+                        bot=interaction.client, channel_id=int(channel_id)
+                    )
+                ) and isinstance(channel, Messageable):
+                    await channel.send(content=message)
+                else:
+                    return await interaction.response.send_message(
+                        content="That channel is not messageable!", ephemeral=True
+                    )
+            elif isinstance(interaction.channel, Messageable):
+                await interaction.channel.send(content=message)
+            else:
+                return await interaction.response.send_message(
+                    content="That channel is not messageable!", ephemeral=True
+                )
+        except ValueError:
+            return await interaction.response.send_message(
+                "channel id should be an integer", ephemeral=True
+            )
+        await interaction.response.send_message("Done.", ephemeral=True)
 
     @commands.command(name="sync_app_cmds", aliases=["sync_app"])
     @is_me_command()
@@ -140,6 +177,13 @@ class misc(Cog):
     async def sync_app_cmds_err(self, ctx: Context, error: CommandError):
         if isinstance(error, IsNotDev):
             await ctx.send(error.message)
+
+    @say.error
+    async def say_err(
+        self, interaction: Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, IsNotDev):
+            await interaction.response.send_message(error.message)
 
 
 async def setup(client: DragonBot):
