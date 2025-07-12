@@ -36,6 +36,15 @@ def is_me_command():
     return commands.check(predicate)
 
 
+def is_me_app_command():
+    async def predicate(interaction: Interaction) -> bool:
+        if not interaction.user.id == My_user_id:
+            raise IsNotDev
+        return True
+
+    return app_commands.check(predicate)
+
+
 def is_administrator():
     """
     A custom check to verify that the user is either an administrator of the guild

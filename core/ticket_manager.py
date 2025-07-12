@@ -4,6 +4,7 @@ from discord.ext import commands
 from discord import Guild, User, Member, Embed, TextChannel, Client
 from discord.abc import GuildChannel
 from typing import Union, List, Optional, Dict, Set
+from discord.ext.commands.errors import ChannelNotFound
 from discord.ui import View
 import yaml
 from config.models import (
@@ -24,7 +25,13 @@ from config.constants import (
 )
 
 import asyncio
-from utils.discord_utils import get_or_fetch
+from utils.discord_utils import (
+    get_or_fetch,
+    try_get_channel_by_bot,
+    try_get_channel,
+    try_get_guild,
+    try_get_member,
+)
 from utils.embed_utils import create_themed_embed
 import subprocess
 from datetime import datetime, timedelta
@@ -45,46 +52,13 @@ class TicketManager:
         self.panel_messages: Dict[int, PanelMessageData] = dict()
         self.ticket_caches: Dict[int, Ticket] = dict()
 
-    @staticmethod
-    async def try_get_channel(
-        guild: discord.Guild, channel_id: int
-    ) -> Optional[Union[GuildChannel, discord.Thread]]:
-        """
-        Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
-        """
-        return await get_or_fetch(
-            container=guild,
-            obj_id=channel_id,
-            get_method_name="get_channel",
-            fetch_method_name="fetch_channel",
-        )
-
-    async def try_get_channel_by_bot(
+    async def _try_get_channel_by_bot(
         self, channel_id: int
     ) -> Optional[Union[GuildChannel, discord.Thread]]:
         """
         Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
         """
-        return await get_or_fetch(
-            container=self.bot,
-            obj_id=channel_id,
-            get_method_name="get_channel",
-            fetch_method_name="fetch_channel",
-        )
-
-    async def try_get_guild(
-        self,
-        guild_id: int,
-    ) -> Optional[Guild]:
-        """
-        Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
-        """
-        return await get_or_fetch(
-            container=self.bot,
-            obj_id=guild_id,
-            get_method_name="get_guild",
-            fetch_method_name="fetch_guild",
-        )
+        return await try_get_channel_by_bot(bot=self.bot, channel_id=channel_id)
 
     async def try_get_ticket_in_cache_by_channel_id(
         self, channel_id: int
@@ -97,14 +71,8 @@ class TicketManager:
                 return ticket
         return None
 
-    @staticmethod
-    async def try_get_member(guild: Guild, member_id: int) -> Optional[Member]:
-        return await get_or_fetch(
-            container=guild,
-            obj_id=member_id,
-            get_method_name="get_member",
-            fetch_method_name="fetch_member",
-        )
+    async def _try_get_guild(self, guild_id: int) -> Optional[Guild]:
+        return await try_get_guild(bot=self.bot, guild_id=guild_id)
 
     def get_business_hours_embed(self) -> Embed:
         embed = create_themed_embed(
@@ -219,6 +187,32 @@ class TicketManager:
         assert isinstance(participants, list)
         return {p["participant_id"] for p in participants}
 
+    async def archive_ticket(self, channel_id: int) -> tuple[bytes, str]:
+        """
+        Archive the ticket with the given ticket_id.
+        This function will return a bytes object which can be loaded with discord.File and the name of the exported file.
+        Raises: ChannelNotTicket if ticket is not found, ChannelNotFound if the channelid cannot be found in the guild.
+        """
+        ticket = await self.get_ticket(channel_id=channel_id)
+        if not ticket:
+            raise ChannelNotTicket(f"Channel with ID {channel_id} is not a ticket.")
+        channel = await self._try_get_channel_by_bot(channel_id=channel_id)
+        if not channel:
+            raise ChannelNotFound(
+                f"Channel with ID {ticket.channel_id} not found in the guild."
+            )
+        assert isinstance(channel, TextChannel)
+        transcript_bytes: bytes
+        with tempfile.TemporaryDirectory() as temp_dir:
+            transcript_path_str = await self._run_archive_exporter_sync(
+                channel.id, temp_dir
+            )
+            transcript_path = pathlib.Path(transcript_path_str)
+            transcript_bytes = transcript_path.read_bytes()
+            filename = transcript_path.name
+
+        return transcript_bytes, filename
+
     async def get_ticket_participants_member(
         self, ticket_id: int
     ) -> Union[Set[Member], None]:
@@ -228,7 +222,7 @@ class TicketManager:
         ticket = await self.get_ticket(ticket_id=ticket_id)
         if not ticket:
             return None
-        guild = await self.try_get_guild(guild_id=ticket.guild_id)
+        guild = await self._try_get_guild(guild_id=ticket.guild_id)
         if not guild:
             return None
         members = set()
@@ -250,12 +244,12 @@ class TicketManager:
         ticket = await self.get_ticket(channel_id=channel_id)
         if not ticket:
             raise ChannelNotTicket
-        ticket_guild = await self.try_get_guild(guild_id=ticket.guild_id)
+        ticket_guild = await self._try_get_guild(guild_id=ticket.guild_id)
         if not ticket_guild:
             raise Exception(
                 f"Guild with id {ticket.guild_id} cannot be found. Please check if the bot is in the guild."
             )
-        ticket_channel = await self.try_get_channel(
+        ticket_channel = await try_get_channel(
             guild=ticket_guild, channel_id=ticket.channel_id
         )
         if not ticket_channel:
@@ -263,9 +257,7 @@ class TicketManager:
                 f"Channel with id {channel_id} cannot be found in the guild with id {ticket.guild_id}."
             )
 
-        member_obj = await self.try_get_member(
-            guild=ticket_guild, member_id=participant_id
-        )
+        member_obj = await try_get_member(guild=ticket_guild, member_id=participant_id)
         if not member_obj:
             raise Exception(f"Member object cannot be find with id {participant_id}")
 
@@ -282,6 +274,7 @@ class TicketManager:
                 data={"ticket_id": ticket.db_id, "participant_id": participant_id},
                 returning_col="ticket_id",
             )
+            self.ticket_caches[ticket.db_id].participants.add(participant_id)
         except Exception as e:
             print(
                 f"Error occured when adding user with id {participant_id} into database. {e}"
@@ -306,7 +299,7 @@ class TicketManager:
         permission_updates = []
         member_updates = []
         for part_id in participants_id:
-            member = await self.try_get_member(guild=channel.guild, member_id=part_id)
+            member = await try_get_member(guild=channel.guild, member_id=part_id)
             if not member:
                 print(
                     f"Warning: Could not find member with ID {part_id} in guild {channel.guild.id} to update permissions."
@@ -341,14 +334,14 @@ class TicketManager:
         if not ticket:
             raise ChannelNotTicket
 
-        ticket_guild = await self.try_get_guild(guild_id=ticket.guild_id)
+        ticket_guild = await self._try_get_guild(guild_id=ticket.guild_id)
 
         if not ticket_guild:
             raise Exception(
                 "Guild cannot be found. Please check if the bot is in the guild."
             )
 
-        ticket_channel = await self.try_get_channel(
+        ticket_channel = await try_get_channel(
             guild=ticket_guild, channel_id=channel_id
         )
         if not isinstance(ticket_channel, TextChannel):
@@ -388,14 +381,14 @@ class TicketManager:
         if not ticket:
             raise ChannelNotTicket
 
-        ticket_guild = await self.try_get_guild(guild_id=ticket.guild_id)
+        ticket_guild = await self._try_get_guild(guild_id=ticket.guild_id)
 
         if not ticket_guild:
             raise Exception(
                 "Guild cannot be found. Please check if the bot is in the guild."
             )
 
-        ticket_channel = await self.try_get_channel(
+        ticket_channel = await try_get_channel(
             guild=ticket_guild, channel_id=channel_id
         )
         if not isinstance(ticket_channel, TextChannel):
@@ -600,25 +593,22 @@ class TicketManager:
         msg = await channel.send("頻道紀錄檔案生成中...")
         try:
             transcript_bytes: bytes
-            with tempfile.TemporaryDirectory() as temp_dir:
-                transcript_path_str = await self._run_archive_exporter_sync(
-                    channel.id, temp_dir
-                )
-                transcript_path = pathlib.Path(transcript_path_str)
-                transcript_bytes = transcript_path.read_bytes()
-                filename = transcript_path.name
+            transcript_bytes, filename = await self.archive_ticket(
+                channel_id=channel.id
+            )
 
-            archive_channel = await get_or_fetch(
-                container=self.bot,
-                obj_id=archive_channel_id,
-                get_method_name="get_channel",
-                fetch_method_name="fetch_channel",
+            archive_channel = await self._try_get_channel_by_bot(
+                channel_id=archive_channel_id
             )
             if not archive_channel:
                 raise ChannelNotTicket(
                     f"Archive channel with ID {archive_channel_id} not found."
                 )
             assert isinstance(archive_channel, TextChannel)
+            transcript_file = discord.File(
+                fp=io.BytesIO(transcript_bytes),
+                filename=f"{filename}",
+            )
 
             UTC_to_GMT = timedelta(hours=8)
             new = channel.created_at + UTC_to_GMT
@@ -631,12 +621,7 @@ class TicketManager:
                 color=THEME_COLOR,
             )
 
-            transcript_file = discord.File(
-                fp=io.BytesIO(transcript_bytes),
-                filename=f"{filename}.html",
-            )
-            new = await archive_channel.send(embed=archive_embed)
-            new = await new.edit(attachments=[transcript_file])
+            new = await archive_channel.send(embed=archive_embed, file=transcript_file)
 
             msg = await msg.edit(content="生成完成✅傳送回饋單給客戶中...")
             view = FeedBackSystem()
@@ -749,7 +734,9 @@ class TicketManager:
         Returns:
             None, if everything works fine.
         """
-        ticket_channel = await self.try_get_channel_by_bot(channel_id=ticket.channel_id)
+        ticket_channel = await self._try_get_channel_by_bot(
+            channel_id=ticket.channel_id
+        )
         if not ticket_channel:
             raise TicketNotFound(
                 f"Ticket channel with ID {ticket.channel_id} not found in the guild with ID {ticket.guild_id}."

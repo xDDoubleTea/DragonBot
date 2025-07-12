@@ -2,17 +2,18 @@ from discord import (
     Guild,
     Interaction,
     Member,
-    PartialMessage,
     TextChannel,
     User,
     Message,
 )
 import discord
+import io
+import random
 from discord.app_commands import MissingRole
 from discord.app_commands.errors import AppCommandError
 from discord.ext import commands
-from discord.abc import GuildChannel
 from discord.ext.commands import Cog
+from discord.ext.commands.errors import ChannelNotFound
 from discord.ext.commands.hybrid import app_commands
 from config.canned_response import ReplyKeys
 from config.constants import (
@@ -39,7 +40,12 @@ from view.ticket_views import (
 )
 from typing import List, Union, Optional, Dict
 from utils.transformers import CannedResponseTransformer
-from utils.discord_utils import get_or_fetch
+from utils.discord_utils import (
+    try_get_message,
+    try_get_channel,
+    try_get_guild,
+    try_get_role,
+)
 
 
 class TicketsCog(Cog):
@@ -55,56 +61,14 @@ class TicketsCog(Cog):
         await self.restore_ticket_panel()
         await self.restore_close_buttons()
 
-    @staticmethod
-    async def try_get_channel(
-        guild: discord.Guild, channel_id: int
-    ) -> Optional[Union[GuildChannel, discord.Thread]]:
-        """
-        Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
-        """
-        return await get_or_fetch(
-            container=guild,
-            obj_id=channel_id,
-            get_method_name="get_channel",
-            fetch_method_name="fetch_channel",
-        )
-
-    async def try_get_guild(
+    async def _try_get_guild(
         self,
         guild_id: int,
     ) -> Optional[Guild]:
         """
         Attempts to get a channel by ID from the guild, falling back to fetching it if not found.
         """
-        return await get_or_fetch(
-            container=self.bot,
-            obj_id=guild_id,
-            get_method_name="get_guild",
-            fetch_method_name="fetch_guild",
-        )
-
-    @staticmethod
-    async def try_get_role(guild: Guild, role_id: int) -> Optional[discord.Role]:
-        """
-        Attempts to get a role by ID from the guild, falling back to fetching it if not found.
-        """
-        return await get_or_fetch(
-            container=guild,
-            obj_id=role_id,
-            get_method_name="get_role",
-            fetch_method_name="fetch_role",
-        )
-
-    @staticmethod
-    async def try_get_message(
-        channel: TextChannel, message_id: int
-    ) -> Optional[PartialMessage | Message]:
-        return await get_or_fetch(
-            container=channel,
-            obj_id=message_id,
-            get_method_name="get_partial_message",
-            fetch_method_name="fetch_message",
-        )
+        return await try_get_guild(self.bot, guild_id=guild_id)
 
     @staticmethod
     def _admin_mentioned(message: Message) -> bool:
@@ -137,19 +101,17 @@ class TicketsCog(Cog):
             assert guild_id and channel_id and message_id
             try:
                 print(f"Restoring panel for guild with ID {guild_id}")
-                guild = await self.try_get_guild(guild_id=guild_id)
+                guild = await self._try_get_guild(guild_id=guild_id)
                 if not guild:
                     print(f"Cannot find guild with ID {guild_id}. Skipping.")
                     continue
-                channel = await self.try_get_channel(guild=guild, channel_id=channel_id)
+                channel = await try_get_channel(guild=guild, channel_id=channel_id)
                 if not channel or not isinstance(channel, TextChannel):
                     print(
                         f"Cannot find channel with ID {channel_id} in guild {guild_id}."
                     )
                     continue
-                message = await self.try_get_message(
-                    channel=channel, message_id=message_id
-                )
+                message = await try_get_message(channel=channel, message_id=message_id)
                 if not message:
                     print(
                         f"Cannot find message with ID {message_id} in channel {channel_id}."
@@ -194,12 +156,12 @@ class TicketsCog(Cog):
             close_msg_id = ticket.close_msg_id
             close_msg_type = ticket.close_msg_type
             guild_id = ticket.guild_id
-            guild = await self.try_get_guild(guild_id=guild_id)
+            guild = await self._try_get_guild(guild_id=guild_id)
             if not guild:
                 print(f"Could not find the guild with guild id {guild_id}, skipping...")
                 continue
             channel_id = ticket.channel_id
-            channel = await self.try_get_channel(guild=guild, channel_id=channel_id)
+            channel = await try_get_channel(guild=guild, channel_id=channel_id)
             if not channel or not isinstance(channel, TextChannel):
                 print(
                     f"Could not find the channel with id {channel_id}, deleting ticket {ticket.db_id} from database."
@@ -337,7 +299,7 @@ class TicketsCog(Cog):
                 interaction.channel.id
             )
             if old_close_msg_id:
-                if msg := await self.try_get_message(
+                if msg := await try_get_message(
                     channel=interaction.channel, message_id=old_close_msg_id
                 ):
                     await msg.edit(view=None)
@@ -373,10 +335,10 @@ class TicketsCog(Cog):
             return await interaction.response.send_message(
                 content="Please try again.", ephemeral=True
             )
-        cus_service_role = await self.try_get_role(
+        cus_service_role = await try_get_role(
             guild=interaction.guild, role_id=cus_service_role_id
         )
-        cmd_channel = await self.try_get_channel(
+        cmd_channel = await try_get_channel(
             guild=interaction.guild, channel_id=cmd_channel_id
         )
         if not cus_service_role or not cmd_channel:
@@ -397,11 +359,11 @@ class TicketsCog(Cog):
             )
             if panel:
                 assert isinstance(panel, dict)
-                panel_cnl = await self.try_get_channel(
+                panel_cnl = await try_get_channel(
                     guild=interaction.guild, channel_id=panel["channel_id"]
                 )
                 assert isinstance(panel_cnl, TextChannel)
-                panel_msg = await self.try_get_message(
+                panel_msg = await try_get_message(
                     channel=panel_cnl, message_id=panel["message_id"]
                 )
                 if panel_msg:
@@ -478,6 +440,30 @@ class TicketsCog(Cog):
                 content="此指令只能在客服頻道中使用。", ephemeral=True
             )
 
+    @app_commands.command(name="archive_ticket", description="將客服頻道歸檔。")
+    @app_commands.checks.has_role(cus_service_role_id)
+    @app_commands.guild_only()
+    async def archive_ticket(self, interaction: Interaction):
+        assert interaction.channel
+        await interaction.response.defer(thinking=True)
+        try:
+            transcript_file, filename = await self.ticket_manager.archive_ticket(
+                channel_id=interaction.channel.id
+            )
+            return await interaction.followup.send(
+                "頻道紀錄",
+                ephemeral=True,
+                file=discord.File(
+                    fp=io.BytesIO(transcript_file), filename=f"{filename}"
+                ),
+            )
+        except ChannelNotTicket:
+            return await interaction.response.send_message(
+                "這裡不是客服頻道！", ephemeral=True
+            )
+        except ChannelNotFound as e:
+            return await interaction.response.send_message(content=e)
+
     @app_commands.command(
         name="remove_participant",
         description="將使用者移出客服頻道，需要客服人員身份組才可使用。",
@@ -511,6 +497,51 @@ class TicketsCog(Cog):
             return await interaction.response.send_message(
                 content="此客服頻道已經沒有客戶了，你在幹麻？？？", ephemeral=True
             )
+
+    @app_commands.command(name="choose-抽獎", description="抽獎")
+    @app_commands.guild_only()
+    @app_commands.checks.has_role(cus_service_role_id)
+    async def choose_sth(self, interaction: Interaction):
+        if not isinstance(interaction.channel, TextChannel):
+            return await interaction.response.send_message(
+                "這裡不是客服頻道！", ephemeral=True
+            )
+
+        ticket = await self.ticket_manager.get_ticket(channel_id=interaction.channel.id)
+        if not ticket:
+            return await interaction.response.send_message(
+                "這裡不是客服頻道！", ephemeral=True
+            )
+        assert interaction.guild
+        assert isinstance(interaction.user, Member)
+
+        choices = {
+            "50元購物金": 0.3,
+            "100元購物金": 0.1,
+            "Discord Nitro Basic一個月": 0.3,
+            "Discord Nitro一個月": 0.09,
+            "麥當勞 大蛋捲冰淇淋電子券": 0.2,
+            "龍龍代購網600元以內商品任選一個": 0.01,
+        }
+        temp = [(choice, choices[choice] * 100) for choice in choices]
+
+        res_list = random.sample(
+            population=[ele[0] for ele in temp],
+            counts=[int(ele[1]) for ele in temp],
+            k=1,
+        )
+        result = res_list[0]
+        members = await self.ticket_manager.get_ticket_participants_member(
+            ticket_id=ticket.db_id
+        )
+        if not members:
+            return await interaction.response.send_message(
+                "Something is wrong...", ephemeral=True
+            )
+        members_mention = "".join([member.mention for member in members])
+        return await interaction.response.send_message(
+            f"{members_mention}恭喜您抽中**{result}**！"
+        )
 
     @app_commands.command(name="r", description="回覆指令(只有客服人員能夠使用)")
     @app_commands.checks.has_role(cus_service_role_id)
