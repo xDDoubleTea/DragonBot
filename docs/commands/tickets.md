@@ -68,6 +68,21 @@ Removes a user from the current ticket channel, revoking their access.
 **Parameter Descriptions:**  
 user: The user to remove from the ticket.
 
+## archive_ticket
+
+*(Staff Command)*
+
+**Usage:**  
+`/archive_ticket`  
+**Default Values:**  
+None.  
+**Permissions:**  
+Customer Service Role.  
+**Description:**  
+Sends a archive of the ticket. Can only be used in a ticket channel.  
+**Parameter Descriptions:**  
+None
+
 ## r (Canned Response)
 
 *(Staff Command)*
