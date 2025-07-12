@@ -1,5 +1,6 @@
 from discord import Embed, Member, ButtonStyle, Role, Interaction, TextStyle
 from discord.ui import Modal, View, Button, button, TextInput
+from discord.errors import Forbidden
 
 
 class reason_Modal(Modal):
@@ -13,14 +14,19 @@ class reason_Modal(Modal):
 
     async def on_submit(self, interaction: Interaction) -> None:
         assert interaction.guild and self.embed.title and interaction.message
-        await self.member.send(
-            content=f"先前在「{interaction.guild.name}」所提出之身分組申請被拒絕了"
-        )
-        await self.member.send(content=f"原因如下：\n{self.reason.value}")
-        await self.member.send(content="你所提供的資料：", embed=self.embed)
-        await interaction.response.send_message(
-            "已將拒絕原因傳送給申請人！", ephemeral=True
-        )
+        try:
+            await self.member.send(
+                content=f"先前在「{interaction.guild.name}」所提出之身分組申請被拒絕了"
+            )
+            await self.member.send(content=f"原因如下：\n{self.reason.value}")
+            await self.member.send(content="你所提供的資料：", embed=self.embed)
+            await interaction.response.send_message(
+                "已將拒絕原因傳送給申請人！", ephemeral=True
+            )
+        except Forbidden:
+            await interaction.response.send_message(
+                f"使用者{self.member.mention}不允許私人訊息", ephemeral=True
+            )
         self.embed.title = self.embed.title + "(未通過)"
         self.embed.description = f"申請身分組：{self.role_name}"
         await interaction.message.edit(embed=self.embed)
