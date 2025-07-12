@@ -22,8 +22,9 @@
 | id           | SERIAL      | PRIMARY KEY | The ticket id                                             |
 | channel_id   | numeric(30) | NOT NULL    | The discord channel id for the ticket                     |
 | auto_timeout | INT         | DEFAULT 48  | The auto timeout time for the ticket                      |
-| timed_out    | INT         | \[0,1\]     | Determines if the ticket has timed out                    |
+| timed_out    | INT         | \[0,1\] DEFAULT 0     | Determines if the ticket has timed out                    |
 | close_msg_id | numeric(30) | NOT NULL    | The message id where the close channel button is attached |
+| close_msg_type | numeric(30) | NOT NULL    | The message id where the close channel button is attached |
 | status       | INT         | \[0,1,2,3\] | The ticket status                                         |
 | guild_id     | numeric(30) | NOT NULL    | The guild id where the ticket is located                  |
 
