@@ -5,6 +5,7 @@
   - [close_ticket](#closeticket)
   - [add_participant](#addparticipant)
   - [remove_participant](#removeparticipant)
+  - [archive_ticket](#archiveticket)
   - [r (Canned Response)](#r-canned-response)
 <!--toc:end-->
 

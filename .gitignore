@@ -8,7 +8,7 @@ docs/網站客服單api.md
 
 # Created by https://www.toptal.com/developers/gitignore/api/vim,linux,python,pycharm,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=vim,linux,python,pycharm,visualstudiocode
-
+temp/
 ### Linux ###
 *~
 
