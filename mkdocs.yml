@@ -1,5 +1,6 @@
 site_name: DragonBot documentation
 theme:
+  name: material
   palette: 
     # Palette toggle for light mode
     - scheme: default
