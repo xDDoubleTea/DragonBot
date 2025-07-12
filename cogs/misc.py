@@ -2,7 +2,8 @@ from bs4.element import NavigableString, PageElement
 from discord.ext.commands import Bot, Cog, CommandError, Context
 from discord.ext import commands
 from discord import app_commands, Interaction
-from typing import Literal, Union
+from discord.abc import GuildChannel
+from typing import Literal, Union, Optional
 import requests
 import bs4
 from config.constants import currency_information_url
@@ -107,6 +108,18 @@ class misc(Cog):
             return await msg.add_reaction("💱")
         except Exception as e:
             print(f"Error in cur_convert: {e}")
+
+    @app_commands.command(name="ping", description="Is the bot alive? Pings the bot.")
+    async def ping(self, interaction: Interaction):
+        await interaction.response.send_message(
+            content=f"{round((interaction.client.latency) * 1000)}ms"
+        )
+
+    @app_commands.command(name="say", description="Say a message")
+    async def say(
+        self, interaction: Interaction, message: str, channel: Optional[GuildChannel]
+    ):
+        pass
 
     @commands.command(name="sync_app_cmds", aliases=["sync_app"])
     @is_me_command()
