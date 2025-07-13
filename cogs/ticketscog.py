@@ -10,7 +10,7 @@ import discord
 import io
 import random
 from discord.app_commands import MissingRole
-from discord.app_commands.errors import AppCommandError
+from discord.app_commands.errors import AppCommandError, MissingPermissions
 from discord.ext import commands
 from discord.ext.commands import Cog
 from discord.ext.commands.errors import ChannelNotFound
@@ -51,6 +51,11 @@ from utils.discord_utils import (
 
 
 class TicketsCog(Cog):
+    ticket_operations = app_commands.Group(
+        name="ticket_operations",
+        description="Actions to act on ticket.",
+    )
+
     def __init__(
         self,
         bot: commands.Bot,
@@ -63,6 +68,36 @@ class TicketsCog(Cog):
         self.panel_messages: Dict[int, PanelMessageData] = (
             self.ticket_panel_manager.ticket_panels
         )
+
+    @Cog.listener()
+    async def on_app_command_error(
+        self, interaction: discord.Interaction, error: AppCommandError
+    ):
+        """A global error handler for all commands in this cog."""
+        if isinstance(error, MissingPermissions):
+            await interaction.response.send_message(
+                "你不是管理員，沒有權限使用此指令！", ephemeral=True
+            )
+        # Handle cases where the interaction has already been responded to
+        elif isinstance(error, discord.errors.InteractionResponded):
+            await interaction.followup.send(
+                "發生了一個內部錯誤，但已成功回覆。", ephemeral=True
+            )
+        elif isinstance(error, MissingRole):
+            await interaction.response.send_message(
+                "只有客服人員才能使用此指令！", ephemeral=True
+            )
+        else:
+            # For other errors, you can log them or send a generic message
+            print(f"An unhandled error occurred in RoleRequest cog: {error}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"發生未知的錯誤: {error}", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"發生未知的錯誤: {error}", ephemeral=True
+                )
 
     @Cog.listener(name="on_ready")
     async def on_ready(self):
@@ -232,7 +267,7 @@ class TicketsCog(Cog):
         ):
             await self.ticket_panel_manager.delete_panel(panel_message_data=panel)
 
-    @app_commands.command(
+    @ticket_operations.command(
         name="close_ticket",
         description="將生成一個新的關閉頻道訊息，只能在客服頻道中且只能被客服人員使用。",
     )
@@ -274,14 +309,7 @@ class TicketsCog(Cog):
                 "這裡不是客服頻道！", ephemeral=True
             )
 
-    @close_ticket.error
-    async def close_ticket_err(
-        self, interaction: Interaction, error: app_commands.AppCommandError
-    ):
-        if isinstance(error, app_commands.MissingRole):
-            return interaction.response.send_message("你不是客服人員！", ephemeral=True)
-
-    @app_commands.command(
+    @ticket_operations.command(
         name="open_ticket",
         description="將生成一個新的開啟客服頻道之訊息。需要管理員權限才可使用。",
     )
@@ -362,7 +390,7 @@ class TicketsCog(Cog):
             )
         )
 
-    @app_commands.command(
+    @ticket_operations.command(
         name="add_participant",
         description="將使用者加入客服頻道，需要客服人員身份組才可使用。",
     )
@@ -392,7 +420,7 @@ class TicketsCog(Cog):
                 content="此指令只能在客服頻道中使用。", ephemeral=True
             )
 
-    @app_commands.command(name="archive_ticket", description="將客服頻道歸檔。")
+    @ticket_operations.command(name="archive_ticket", description="將客服頻道歸檔。")
     @app_commands.checks.has_role(cus_service_role_id)
     @app_commands.guild_only()
     async def archive_ticket(self, interaction: Interaction):
@@ -416,16 +444,7 @@ class TicketsCog(Cog):
         except ChannelNotFound as e:
             return await interaction.response.send_message(content=e)
 
-    @archive_ticket.error
-    async def archive_ticket_error(
-        self, interaction: Interaction, error: AppCommandError
-    ):
-        if isinstance(error, MissingRole):
-            return await interaction.response.send_message(
-                "只有客服人員能夠使用此指令！", ephemeral=True
-            )
-
-    @app_commands.command(
+    @ticket_operations.command(
         name="remove_participant",
         description="將使用者移出客服頻道，需要客服人員身份組才可使用。",
     )
@@ -459,16 +478,7 @@ class TicketsCog(Cog):
                 content="此客服頻道已經沒有客戶了，你在幹麻？？？", ephemeral=True
             )
 
-    @remove_participant.error
-    async def remove_participant_error(
-        self, interaction: Interaction, error: AppCommandError
-    ):
-        if isinstance(error, MissingRole):
-            return await interaction.response.send_message(
-                "只有客服人員能夠使用此指令！", ephemeral=True
-            )
-
-    @app_commands.command(name="choose-抽獎", description="抽獎")
+    @ticket_operations.command(name="choose-抽獎", description="抽獎")
     @app_commands.guild_only()
     @app_commands.checks.has_role(cus_service_role_id)
     async def choose_sth(self, interaction: Interaction):
@@ -567,13 +577,6 @@ class TicketsCog(Cog):
         return await interaction.response.send_message(
             "傳送完成", delete_after=3, ephemeral=True
         )
-
-    @r.error
-    async def r_error(self, interaction: Interaction, error: AppCommandError):
-        if isinstance(error, MissingRole):
-            return await interaction.response.send_message(
-                "只有客服人員能夠使用此指令！", ephemeral=True
-            )
 
 
 async def setup(client):
