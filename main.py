@@ -11,6 +11,7 @@ from config import (
     db_url,
     MY_GUILD,
 )
+from core.feedback_manager import FeedbackManager
 from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
@@ -34,8 +35,13 @@ class DragonBot(commands.Bot):
         # Maybe we will need the Synchrounus database manager one day.
 
         self.async_db_manager = AsyncDatabaseManager(db_url=db_url)
-        self.ticket_manager = TicketManager(
+        self.feedback_manager = FeedbackManager(
             bot=self, database_manager=self.async_db_manager
+        )
+        self.ticket_manager = TicketManager(
+            bot=self,
+            database_manager=self.async_db_manager,
+            feedback_manager=self.feedback_manager,
         )
         self.ticket_panel_manager = TicketPanelManager(
             bot=self, database_manager=self.async_db_manager

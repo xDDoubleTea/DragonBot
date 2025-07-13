@@ -2,7 +2,6 @@ from typing import List, Union
 from discord import (
     Client,
     Embed,
-    File,
     Interaction,
     Member,
     SelectOption,
@@ -13,7 +12,10 @@ from discord import (
 )
 from discord.ui import TextInput, Modal, View, select, button, Button, Select
 from config.constants import feedback_channel_id
+from config.models import FeedbackEntry
+from core.feedback_manager import FeedbackManager
 from utils import embed_utils
+from utils.discord_utils import try_get_channel_by_bot
 
 words_options = [
     SelectOption(label="服務速度快速", emoji="✅", default=False),
@@ -23,8 +25,13 @@ words_options = [
 
 
 class FeedbackModal(Modal):
-    def __init__(self):
+    def __init__(
+        self, ticket_id: int, guild_id: int, feedback_manager: FeedbackManager
+    ):
         super().__init__(title="評語", timeout=None)
+        self.ticket_id = ticket_id
+        self.guild_id = guild_id
+        self.feedback_manager = feedback_manager
 
     text = TextInput(
         label="評語",
@@ -37,7 +44,16 @@ class FeedbackModal(Modal):
         await interaction.response.defer()
         assert interaction.message
         await interaction.message.edit(view=None)
-        channel = await interaction.client.fetch_channel(feedback_channel_id)
+        await self.feedback_manager.update_feedback_message(
+            ticket_id=self.ticket_id,
+            guild_id=self.guild_id,
+            customer_id=interaction.user.id,
+            feedback_message=self.text.value,
+        )
+        channel = await try_get_channel_by_bot(
+            bot=interaction.client, channel_id=feedback_channel_id
+        )
+        assert isinstance(channel, TextChannel)
         embed = embed_utils.create_themed_embed(
             title="顧客回饋", description="回饋", client=interaction.client
         )
@@ -70,8 +86,13 @@ def feedbackEmbed(
 
 
 class FeedBackSystem(View):
-    def __init__(self):
+    def __init__(
+        self, ticket_id: int, guild_id: int, feedback_manager: FeedbackManager
+    ):
         super().__init__(timeout=86400)
+        self.ticket_id = ticket_id
+        self.guild_id = guild_id
+        self.feedback_manager = feedback_manager
         for i in range(1, 6):
             star_emoji = "⭐" * i
             btn = Button(
@@ -104,27 +125,52 @@ class FeedBackSystem(View):
         embed = self.get_feedback_embed(
             client=interaction.client, rating=star, user=interaction.user
         )
-        msg = await interaction.response.send_message(
+        await interaction.response.send_message(
             f"評分 {star_emoji} 已傳送!感謝您的惠顧!"
         )
-        msg = await interaction.original_response()
-        await msg.add_reaction("✅")
+        feedback_entry = FeedbackEntry(
+            ticket_id=self.ticket_id,
+            guild_id=self.guild_id,
+            rating=star,
+            customer_id=interaction.user.id,
+        )
+        await self.feedback_manager.insert_feedback_entry(feedback_entry=feedback_entry)
 
+        feed_back_channel = await try_get_channel_by_bot(
+            bot=interaction.client, channel_id=feedback_channel_id
+        )
+        assert isinstance(feed_back_channel, TextChannel)
+        new_name = f"⭐評價{await self.feedback_manager.get_avg_rating(guild_id=self.guild_id)}星"
+        print(new_name)
+        await feed_back_channel.edit(topic=new_name)
+        await feed_back_channel.send(embed=embed)
         await interaction.user.send(
             "若您有興趣的話，請選擇想與今天服務人員說的話，或點擊按鈕輸入(擇1)。",
-            view=words_selction(),
+            view=words_selction(
+                ticket_id=self.ticket_id,
+                guild_id=self.guild_id,
+                feedback_manager=self.feedback_manager,
+            ),
         )
-        feed_back_channel = interaction.client.get_channel(feedback_channel_id)
-        assert isinstance(feed_back_channel, TextChannel)
-        await feed_back_channel.send(embed=embed)
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            if isinstance(child, Button):
+                child.disabled = True
+                child.label = "已逾期..."
 
 
 class words_selction(View):
-    def __init__(self):
+    def __init__(
+        self, ticket_id: int, guild_id: int, feedback_manager: FeedbackManager
+    ):
+        self.ticket_id = ticket_id
+        self.guild_id = guild_id
+        self.feedback_manager = feedback_manager
         super().__init__(timeout=86400)
 
     @staticmethod
-    def review_words_embed(
+    def joined_review_words_and_embed(
         client: Client, values: List[str], user: Union[User, Member]
     ) -> tuple[Embed, str]:
         embed = embed_utils.create_themed_embed(
@@ -149,10 +195,16 @@ class words_selction(View):
         await interaction.message.edit(view=None)
         assert interaction.data
         values = select.values
-        embed, output = self.review_words_embed(
+        embed, output = self.joined_review_words_and_embed(
             client=interaction.client,
             values=values,
             user=interaction.user,
+        )
+        await self.feedback_manager.update_feedback_message(
+            ticket_id=self.ticket_id,
+            guild_id=self.guild_id,
+            customer_id=interaction.user.id,
+            feedback_message=output,
         )
         feedback_channel = interaction.client.get_channel(feedback_channel_id)
         assert isinstance(feedback_channel, TextChannel)
@@ -165,4 +217,10 @@ class words_selction(View):
     async def btn_callback(self, interaction: Interaction, button: Button):
         assert interaction.message
         await interaction.message.edit(view=None)
-        return await interaction.response.send_modal(FeedbackModal())
+        return await interaction.response.send_modal(
+            FeedbackModal(
+                ticket_id=self.ticket_id,
+                guild_id=self.guild_id,
+                feedback_manager=self.feedback_manager,
+            )
+        )

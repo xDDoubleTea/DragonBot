@@ -1,9 +1,9 @@
 import io
 import discord
-from discord.ext import commands
 from discord import Guild, User, Member, Embed, TextChannel, Client
 from discord.abc import GuildChannel
 from typing import Union, List, Optional, Dict, Set
+from discord.ext.commands import Bot
 from discord.ext.commands.errors import ChannelNotFound
 from discord.ui import View
 import yaml
@@ -14,6 +14,7 @@ from config.models import (
     TicketType,
     PanelMessageData,
 )
+from core.feedback_manager import FeedbackManager
 from db.database_manager import AsyncDatabaseManager
 from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFound
 from config.constants import (
@@ -43,10 +44,16 @@ from view.feedback_views import FeedBackSystem, feedbackEmbed
 
 
 class TicketManager:
-    def __init__(self, bot: commands.Bot, database_manager: AsyncDatabaseManager):
+    def __init__(
+        self,
+        bot: Bot | Client,
+        database_manager: AsyncDatabaseManager,
+        feedback_manager: FeedbackManager,
+    ):
         self.database_manager = database_manager
         self.bot = bot
         self.ticket_table_name = "tickets"
+        self.feedback_manager = feedback_manager
         self.ticket_panels_table_name = "ticket_panels"
         self.ticket_participants_table_name = "ticket_participants"
         self.panel_messages: Dict[int, PanelMessageData] = dict()
@@ -375,7 +382,12 @@ class TicketManager:
             table_name=self.ticket_participants_table_name,
             data=data,
         )
-        self.ticket_caches[ticket.db_id].participants.union(member_to_add_to_db)
+        print(self.ticket_caches[ticket.db_id].participants.union(member_to_add_to_db))
+        print(self.ticket_caches[ticket.db_id].participants)
+        self.ticket_caches[ticket.db_id].participants = self.ticket_caches[
+            ticket.db_id
+        ].participants.union(member_to_add_to_db)
+        print(self.ticket_caches[ticket.db_id].participants)
         return member_to_add_to_db
 
     async def remove_ticket_participants(
@@ -642,7 +654,11 @@ class TicketManager:
             new = await archive_channel.send(embed=archive_embed, file=transcript_file)
 
             msg = await msg.edit(content="生成完成✅傳送回饋單給客戶中...")
-            view = FeedBackSystem()
+            view = FeedBackSystem(
+                ticket_id=ticket.db_id,
+                guild_id=ticket.guild_id,
+                feedback_manager=self.feedback_manager,
+            )
             feedback_embed = feedbackEmbed(channel=channel, client=client)
             for customer in customers:
                 if customer:
