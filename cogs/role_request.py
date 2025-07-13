@@ -57,8 +57,7 @@ class RoleRequest(Cog):
             return RoleRequestStatus.NO_ROLE
         return RoleRequestStatus.SET
 
-    @Cog.listener()
-    async def on_app_command_error(
+    async def cog_app_command_error(
         self, interaction: discord.Interaction, error: AppCommandError
     ):
         """A global error handler for all commands in this cog."""

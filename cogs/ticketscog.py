@@ -69,8 +69,7 @@ class TicketsCog(Cog):
             self.ticket_panel_manager.ticket_panels
         )
 
-    @Cog.listener()
-    async def on_app_command_error(
+    async def cog_app_command_error(
         self, interaction: discord.Interaction, error: AppCommandError
     ):
         """A global error handler for all commands in this cog."""
