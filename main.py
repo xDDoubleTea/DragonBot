@@ -11,6 +11,7 @@ from config import (
     db_url,
     MY_GUILD,
 )
+from core.bug_reporter import BugReporter
 from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
@@ -39,6 +40,7 @@ class DragonBot(commands.Bot):
         self.role_request_manager = RoleRequestManager(
             bot=self, database_manager=self.async_db_manager
         )
+        self.bug_reporter = BugReporter()
 
     async def on_ready(self):
         print(f"{self.user} is now online!")
