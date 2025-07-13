@@ -99,7 +99,14 @@ class TicketsCog(Cog):
         )
         for message in all_panel_messages:
             view = TicketCreationView(ticket_manager=self.ticket_manager)
-            await message.edit(view=view)
+            try:
+                await message.edit(view=view)
+            except (discord.errors.NotFound, discord.errors.HTTPException):
+                print("The message might have been deleted.")
+                assert message.channel.guild
+                await self.ticket_panel_manager.delete_panel_by_guild_id(
+                    guild_id=message.channel.guild.id,
+                )
 
         print("Done!")
 
@@ -235,7 +242,7 @@ class TicketsCog(Cog):
         try:
             assert isinstance(
                 interaction.channel, TextChannel
-            ) and self.ticket_manager.is_ticket_channel(
+            ) and await self.ticket_manager.is_ticket_channel(
                 channel_id=interaction.channel.id
             )
             # First send the message
@@ -280,7 +287,7 @@ class TicketsCog(Cog):
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def open_ticket(self, interaction: Interaction):
-        await interaction.response.defer(thinking=True, ephemeral=True)
+        await interaction.response.defer(thinking=True, ephemeral=False)
         if not interaction.guild:
             return await interaction.followup.send(
                 content="Please try again.", ephemeral=True
@@ -409,6 +416,15 @@ class TicketsCog(Cog):
         except ChannelNotFound as e:
             return await interaction.response.send_message(content=e)
 
+    @archive_ticket.error
+    async def archive_ticket_error(
+        self, interaction: Interaction, error: AppCommandError
+    ):
+        if isinstance(error, MissingRole):
+            return await interaction.response.send_message(
+                "只有客服人員能夠使用此指令！", ephemeral=True
+            )
+
     @app_commands.command(
         name="remove_participant",
         description="將使用者移出客服頻道，需要客服人員身份組才可使用。",
@@ -441,6 +457,15 @@ class TicketsCog(Cog):
         except NoParticipants:
             return await interaction.response.send_message(
                 content="此客服頻道已經沒有客戶了，你在幹麻？？？", ephemeral=True
+            )
+
+    @remove_participant.error
+    async def remove_participant_error(
+        self, interaction: Interaction, error: AppCommandError
+    ):
+        if isinstance(error, MissingRole):
+            return await interaction.response.send_message(
+                "只有客服人員能夠使用此指令！", ephemeral=True
             )
 
     @app_commands.command(name="choose-抽獎", description="抽獎")
@@ -487,6 +512,13 @@ class TicketsCog(Cog):
         return await interaction.response.send_message(
             f"{members_mention}恭喜您抽中**{result}**！"
         )
+
+    @choose_sth.error
+    async def choose_sth_error(self, interaction: Interaction, error: AppCommandError):
+        if isinstance(error, MissingRole):
+            return await interaction.response.send_message(
+                "只有客服人員能夠使用此指令！", ephemeral=True
+            )
 
     @app_commands.command(name="r", description="回覆指令(只有客服人員能夠使用)")
     @app_commands.checks.has_role(cus_service_role_id)

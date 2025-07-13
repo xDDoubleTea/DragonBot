@@ -189,7 +189,6 @@ class TicketManager:
             return set()
         assert isinstance(participants, list)
         participants_set = {p["participant_id"] for p in participants}
-        self.ticket_caches[ticket_id].participants = participants_set
         return participants_set
 
     async def archive_ticket(self, channel_id: int) -> tuple[bytes, str]:
