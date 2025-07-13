@@ -163,7 +163,7 @@ class TicketManager:
         )
         if not ticket_data:
             return None
-        return Ticket(
+        ticket = Ticket(
             db_id=ticket_data["id"],
             channel_id=ticket_data["channel_id"],
             auto_timeout=ticket_data["auto_timeout"],
@@ -174,8 +174,11 @@ class TicketManager:
             guild_id=ticket_data["guild_id"],
             close_msg_type=ticket_data["close_msg_type"],
         )
+        # Cache on read
+        self.ticket_caches[ticket.db_id] = ticket
+        return ticket
 
-    async def get_ticket_participants_id(self, ticket_id: int) -> Union[Set[int], None]:
+    async def get_ticket_participants_id(self, ticket_id: int) -> Set[int]:
         if ticket := self.ticket_caches.get(ticket_id):
             return ticket.participants
         participants = await self.database_manager.select(
@@ -183,9 +186,11 @@ class TicketManager:
             criteria={"ticket_id": ticket_id},
         )
         if not participants:
-            return None
+            return set()
         assert isinstance(participants, list)
-        return {p["participant_id"] for p in participants}
+        participants_set = {p["participant_id"] for p in participants}
+        self.ticket_caches[ticket_id].participants = participants_set
+        return participants_set
 
     async def archive_ticket(self, channel_id: int) -> tuple[bytes, str]:
         """
@@ -433,6 +438,20 @@ class TicketManager:
         try:
             assert result, "No ticket found for the given channel ID."
             assert isinstance(result, dict)
+            self.ticket_caches[result["id"]] = Ticket(
+                db_id=result["id"],
+                channel_id=channel_id,
+                auto_timeout=result["auto_timeout"],
+                timed_out=result["timed_out"],
+                close_msg_id=result["close_msg_id"],
+                status=result["status"],
+                ticket_type=result["ticket_type"],
+                guild_id=result["guild_id"],
+                close_msg_type=result["close_msg_id"],
+                participants=await self.get_ticket_participants_id(
+                    ticket_id=result["id"]
+                ),
+            )
             return result["close_msg_id"]
         except (AssertionError, KeyError):
             print(
