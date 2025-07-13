@@ -57,15 +57,15 @@ class TicketPanelManager:
         Almost always provide guild_id to this function.
         """
         # First check cache
-        if guild_id and guild_id in self.ticket_panels:
+        if guild_id and guild_id in self.ticket_panels.keys():
             cached_panel = self.ticket_panels[guild_id]
-            if (not channel_id or cached_panel.channel_id == channel_id) or (
-                not message_id or cached_panel.message_id == message_id
+            if (channel_id and cached_panel.channel_id == channel_id) and (
+                message_id and cached_panel.message_id == message_id
             ):
                 return cached_panel
         else:
             for panel in self.ticket_panels.values():
-                if (channel_id and panel.channel_id == channel_id) or (
+                if (channel_id and panel.channel_id == channel_id) and (
                     message_id and panel.message_id == message_id
                 ):
                     # Found a match on other criteria
