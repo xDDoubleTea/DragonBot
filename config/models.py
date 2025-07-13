@@ -20,6 +20,7 @@ __all__ = [
     "RoleRequestStatus",
     "RoleRequestChannelType",
     "RoleRequestData",
+    "PanelMessageData",
 ]
 
 
