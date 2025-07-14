@@ -99,11 +99,6 @@ class misc(Cog):
                 "請輸入y或n！", ephemeral=True
             )
         await interaction.response.send_message(content=f"NTD ${output}", ephemeral=eph)
-        try:
-            msg = await interaction.original_response()
-            return await msg.add_reaction("💱")
-        except Exception as e:
-            print(f"Error in cur_convert: {e}")
 
     @app_commands.command(name="ping", description="Is the bot alive? Pings the bot.")
     async def ping(self, interaction: Interaction):

@@ -89,12 +89,12 @@ class QuestionModal(Modal):
                 add_std_footer(embed=embed, client=interaction.client)
                 embed.add_field(
                     name="商品名稱",
-                    value=f"`{self.item_purchase_input.value}`",
+                    value=f"{self.item_purchase_input.value}",
                     inline=False,
                 )
                 embed.add_field(
                     name="購買連結與方法",
-                    value=f"`{self.description_input.value}`",
+                    value=f"{self.description_input.value}",
                     inline=False,
                 )
                 await new_channel.send(embed=embed)
