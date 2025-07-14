@@ -382,12 +382,9 @@ class TicketManager:
             table_name=self.ticket_participants_table_name,
             data=data,
         )
-        print(self.ticket_caches[ticket.db_id].participants.union(member_to_add_to_db))
-        print(self.ticket_caches[ticket.db_id].participants)
         self.ticket_caches[ticket.db_id].participants = self.ticket_caches[
             ticket.db_id
         ].participants.union(member_to_add_to_db)
-        print(self.ticket_caches[ticket.db_id].participants)
         return member_to_add_to_db
 
     async def remove_ticket_participants(

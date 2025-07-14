@@ -141,7 +141,6 @@ class FeedBackSystem(View):
         )
         assert isinstance(feed_back_channel, TextChannel)
         new_name = f"⭐評價{await self.feedback_manager.get_avg_rating(guild_id=self.guild_id)}星"
-        print(new_name)
         await feed_back_channel.edit(topic=new_name)
         await feed_back_channel.send(embed=embed)
         await interaction.user.send(

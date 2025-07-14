@@ -1,5 +1,4 @@
 from discord import app_commands, Interaction
-from typing import Optional
 from discord.ext.commands import Cog
 
 from core.feedback_manager import FeedbackManager
