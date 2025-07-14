@@ -679,6 +679,7 @@ class TicketManager:
                         )
                     except Exception as e:
                         print(f"Error: {e}")
+            await msg.edit(content="傳送完成", delete_after=5)
         except subprocess.CalledProcessError as e:
             # This block will run if the exporter command fails
             print(f"Error exporting channel {channel.id}: {e}")
