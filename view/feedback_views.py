@@ -140,7 +140,12 @@ class FeedBackSystem(View):
             bot=interaction.client, channel_id=feedback_channel_id
         )
         assert isinstance(feed_back_channel, TextChannel)
-        new_name = f"⭐評價{await self.feedback_manager.get_avg_rating(guild_id=self.guild_id)}星"
+        avg_rating = await self.feedback_manager.get_avg_rating(guild_id=self.guild_id)
+        if not avg_rating:
+            avg_rating = "N/A"
+        else:
+            avg_rating = round(avg_rating, 1)
+        new_name = f"⭐評價{avg_rating}星"
         await feed_back_channel.edit(topic=new_name)
         await feed_back_channel.send(embed=embed)
         await interaction.user.send(
