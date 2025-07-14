@@ -6,6 +6,7 @@ from config.models import CloseMessageType, TicketType
 from core.ticket_manager import TicketManager
 from config.constants import DS01, DISCORD_EMOJI
 from core.exceptions import ChannelCreationFail
+from utils.embed_utils import add_std_footer, create_themed_embed
 
 
 class QuestionModal(Modal):
@@ -30,13 +31,29 @@ class QuestionModal(Modal):
                 required=False,
             )
             self.add_item(self.guild_problem_input)
-        self.description_input = TextInput(
-            label="問題描述",
-            style=discord.TextStyle.paragraph,
-            placeholder="詳細說明遇到的問題",
-            required=True,
-            max_length=1500,
-        )
+        elif self.ticket_type == TicketType.CUSTOM_PURCHASE:
+            self.item_purchase_input = TextInput(
+                label="想要代購的商品",
+                style=discord.TextStyle.short,
+                placeholder="遊戲點數",
+                required=True,
+            )
+            self.add_item(self.item_purchase_input)
+            self.description_input = TextInput(
+                label="商品連結以及購買方法",
+                style=discord.TextStyle.paragraph,
+                placeholder="連結：...",
+                required=True,
+                max_length=1024,
+            )
+        if self.ticket_type != TicketType.CUSTOM_PURCHASE:
+            self.description_input = TextInput(
+                label="問題描述",
+                style=discord.TextStyle.paragraph,
+                placeholder="詳細說明遇到的問題",
+                required=True,
+                max_length=1500,
+            )
         self.add_item(self.description_input)
 
     async def on_submit(self, interaction: Interaction) -> None:
@@ -59,9 +76,28 @@ class QuestionModal(Modal):
                 raise ChannelCreationFail("Ticket manager failed to return a channel.")
 
             # 2. Send the user's question directly into the new channel.
-            await new_channel.send(
-                content=f"**來自 {interaction.user.mention} 的問題：**\n>>> {self.description_input.value}"
-            )
+            if self.ticket_type != TicketType.CUSTOM_PURCHASE:
+                await new_channel.send(
+                    content=f"**來自 {interaction.user.mention} 的問題：**\n>>> {self.description_input.value}"
+                )
+            else:
+                embed = create_themed_embed(
+                    title="自定義代購商品",
+                    description=f"{interaction.user.mention}想要自定義代購商品",
+                    client=interaction.client,
+                )
+                add_std_footer(embed=embed, client=interaction.client)
+                embed.add_field(
+                    name="商品名稱",
+                    value=f"`{self.item_purchase_input.value}`",
+                    inline=False,
+                )
+                embed.add_field(
+                    name="購買連結與方法",
+                    value=f"`{self.description_input.value}`",
+                    inline=False,
+                )
+                await new_channel.send(embed=embed)
 
             if self.ticket_type == TicketType.PURCHASE and self.order_id_input.value:
                 await new_channel.send(
@@ -109,6 +145,18 @@ class TicketCreationView(View):
         emoji=DISCORD_EMOJI,
     )
     async def guild_callback(self, interaction: Interaction, button: Button):
+        assert button.custom_id
+        modal = QuestionModal(
+            ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
+        )
+        await interaction.response.send_modal(modal)
+
+    @button(
+        label="🛪自定義代購",
+        style=discord.ButtonStyle.blurple,
+        custom_id="自定義代購",
+    )
+    async def custom_order_callback(self, interaction: Interaction, button: Button):
         assert button.custom_id
         modal = QuestionModal(
             ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
