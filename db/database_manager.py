@@ -364,7 +364,3 @@ class AsyncDatabaseManager:
         async with self._pool.acquire() as connection:
             status = await connection.execute(sql, *values)
             return int(status.split()[-1])
-
-
-if __name__ == "__main__":
-    print("Nothing was done...")
