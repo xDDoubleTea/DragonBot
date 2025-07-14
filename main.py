@@ -11,11 +11,8 @@ from config import (
     db_url,
     MY_GUILD,
 )
-<<<<<<< HEAD
 from core.bug_reporter import BugReporter
-=======
 from core.feedback_manager import FeedbackManager
->>>>>>> bdef2810bcd302c4cddc81c13eb36ecfdca439b7
 from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
