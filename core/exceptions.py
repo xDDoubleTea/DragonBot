@@ -46,3 +46,9 @@ class NoParticipants(Exception):
     def __init__(self, message="There are no participants for this ticket."):
         self.message = message
         super().__init__(self.message)
+
+
+class DBNotInit(Exception):
+    def __init__(self, message="AsyncDatabaseManager not initialized!"):
+        self.message = message
+        super().__init__(self.message)

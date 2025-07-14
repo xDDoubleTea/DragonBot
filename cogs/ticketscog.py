@@ -10,11 +10,12 @@ import discord
 import io
 import random
 from discord.app_commands import MissingRole
-from discord.app_commands.errors import AppCommandError
+from discord.app_commands.errors import AppCommandError, MissingPermissions
 from discord.ext import commands
 from discord.ext.commands import Cog
 from discord.ext.commands.errors import ChannelNotFound
 from discord.ext.commands.hybrid import app_commands
+from discord.message import PartialMessage
 from config.canned_response import ReplyKeys
 from config.constants import (
     My_user_id,
@@ -31,6 +32,7 @@ from config.models import CloseMessageType, PanelMessageData, TicketStatus
 from config.canned_response import CANNED_RESPONSES
 from core.exceptions import ChannelNotTicket, NoParticipants
 from core.ticket_manager import TicketManager
+from core.ticket_panel_manager import TicketPanelManager
 from utils.embed_utils import create_themed_embed
 from view.ticket_views import (
     TicketAfterClose,
@@ -49,12 +51,52 @@ from utils.discord_utils import (
 
 
 class TicketsCog(Cog):
-    def __init__(self, bot: commands.Bot, ticket_manager: TicketManager):
+    ticket_operations = app_commands.Group(
+        name="ticket_operations",
+        description="Actions to act on ticket.",
+    )
+
+    def __init__(
+        self,
+        bot: commands.Bot,
+        ticket_manager: TicketManager,
+        ticket_panel_manager: TicketPanelManager,
+    ):
         self.bot = bot
         self.ticket_manager = ticket_manager
+        self.ticket_panel_manager = ticket_panel_manager
         self.panel_messages: Dict[int, PanelMessageData] = (
-            self.ticket_manager.panel_messages
+            self.ticket_panel_manager.ticket_panels
         )
+
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: AppCommandError
+    ):
+        """A global error handler for all commands in this cog."""
+        if isinstance(error, MissingPermissions):
+            await interaction.response.send_message(
+                "你不是管理員，沒有權限使用此指令！", ephemeral=True
+            )
+        # Handle cases where the interaction has already been responded to
+        elif isinstance(error, discord.errors.InteractionResponded):
+            await interaction.followup.send(
+                "發生了一個內部錯誤，但已成功回覆。", ephemeral=True
+            )
+        elif isinstance(error, MissingRole):
+            await interaction.response.send_message(
+                "只有客服人員才能使用此指令！", ephemeral=True
+            )
+        else:
+            # For other errors, you can log them or send a generic message
+            print(f"An unhandled error occurred in RoleRequest cog: {error}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    f"發生未知的錯誤: {error}", ephemeral=True
+                )
+            else:
+                await interaction.followup.send(
+                    f"發生未知的錯誤: {error}", ephemeral=True
+                )
 
     @Cog.listener(name="on_ready")
     async def on_ready(self):
@@ -86,51 +128,20 @@ class TicketsCog(Cog):
         )
 
     async def restore_ticket_panel(self):
-        all_panels = await self.ticket_manager.database_manager.select(
-            table_name=self.ticket_manager.ticket_panels_table_name
+        all_panel_messages = (
+            await self.ticket_panel_manager.load_ticket_panel_messages()
         )
-        print("Restoring ticket panels....")
-        if not all_panels:
-            print("No ticket panels found in the database. Skipping restoration.")
-            return
-        assert isinstance(all_panels, list)
-        for panel in all_panels:
-            guild_id = panel.get("guild_id")
-            channel_id = panel.get("channel_id")
-            message_id = panel.get("message_id")
-            assert guild_id and channel_id and message_id
+        for message in all_panel_messages:
+            view = TicketCreationView(ticket_manager=self.ticket_manager)
             try:
-                print(f"Restoring panel for guild with ID {guild_id}")
-                guild = await self._try_get_guild(guild_id=guild_id)
-                if not guild:
-                    print(f"Cannot find guild with ID {guild_id}. Skipping.")
-                    continue
-                channel = await try_get_channel(guild=guild, channel_id=channel_id)
-                if not channel or not isinstance(channel, TextChannel):
-                    print(
-                        f"Cannot find channel with ID {channel_id} in guild {guild_id}."
-                    )
-                    continue
-                message = await try_get_message(channel=channel, message_id=message_id)
-                if not message:
-                    print(
-                        f"Cannot find message with ID {message_id} in channel {channel_id}."
-                    )
-                    await self.ticket_manager.database_manager.delete(
-                        "ticket_panels", {"guild_id": guild_id}
-                    )
-                    continue
-
-                view = TicketCreationView(ticket_manager=self.ticket_manager)
                 await message.edit(view=view)
-                self.panel_messages[guild_id] = PanelMessageData(
-                    guild_id=guild_id, channel_id=channel_id, message_id=message_id
+            except (discord.errors.NotFound, discord.errors.HTTPException):
+                print("The message might have been deleted.")
+                assert message.channel.guild
+                await self.ticket_panel_manager.delete_panel_by_guild_id(
+                    guild_id=message.channel.guild.id,
                 )
 
-            except Exception as e:
-                print(
-                    f"An error occurred while re-attaching view for guild {guild_id}: {e}"
-                )
         print("Done!")
 
     async def restore_close_buttons(self):
@@ -239,44 +250,23 @@ class TicketsCog(Cog):
     async def on_guild_channel_delete(self, channel):
         if not isinstance(channel, TextChannel):
             return
-        # TODO: Add get_ticket_panel method to TicketManager
-        # TODO: ADD delete_ticket_panel method to TicketManager
-        if self.panel_messages.get(channel.guild.id):
-            self.panel_messages.pop(channel.guild.id)
-            await self.ticket_manager.database_manager.delete(
-                table_name=self.ticket_manager.ticket_panels_table_name,
-                criteria={"guild_id": channel.guild.id, "channel_id": channel.id},
-            )
-        elif await self.ticket_manager.database_manager.select(
-            table_name=self.ticket_manager.ticket_panels_table_name,
-            criteria={"guild_id": channel.guild.id},
+        if panel := await self.ticket_panel_manager.get_panel(
+            guild_id=channel.guild.id, channel_id=channel.id, message_id=None
         ):
-            await self.ticket_manager.database_manager.delete(
-                table_name=self.ticket_manager.ticket_panels_table_name,
-                criteria={"guild_id": channel.guild.id},
-            )
+            await self.ticket_panel_manager.delete_panel(panel_message_data=panel)
 
     @Cog.listener(name="on_message_delete")
     async def on_message_delete(self, message: Message):
         if not message.guild or not isinstance(message.channel, TextChannel):
             return
-        if message.guild.id in self.panel_messages:
-            await self.ticket_manager.database_manager.delete(
-                table_name=self.ticket_manager.ticket_panels_table_name,
-                criteria={"message_id": message.id},
-            )
-
-            self.panel_messages.pop(message.guild.id, None)
-        elif await self.ticket_manager.database_manager.select(
-            table_name=self.ticket_manager.ticket_panels_table_name,
-            criteria={"message_id": message.id},
+        if panel := await self.ticket_panel_manager.get_panel(
+            guild_id=message.channel.guild.id,
+            channel_id=message.channel.id,
+            message_id=message.id,
         ):
-            await self.ticket_manager.database_manager.delete(
-                table_name=self.ticket_manager.ticket_panels_table_name,
-                criteria={"message_id": message.id},
-            )
+            await self.ticket_panel_manager.delete_panel(panel_message_data=panel)
 
-    @app_commands.command(
+    @ticket_operations.command(
         name="close_ticket",
         description="將生成一個新的關閉頻道訊息，只能在客服頻道中且只能被客服人員使用。",
     )
@@ -286,7 +276,7 @@ class TicketsCog(Cog):
         try:
             assert isinstance(
                 interaction.channel, TextChannel
-            ) and self.ticket_manager.is_ticket_channel(
+            ) and await self.ticket_manager.is_ticket_channel(
                 channel_id=interaction.channel.id
             )
             # First send the message
@@ -318,21 +308,15 @@ class TicketsCog(Cog):
                 "這裡不是客服頻道！", ephemeral=True
             )
 
-    @close_ticket.error
-    async def close_ticket_err(
-        self, interaction: Interaction, error: app_commands.AppCommandError
-    ):
-        if isinstance(error, app_commands.MissingRole):
-            return interaction.response.send_message("你不是客服人員！", ephemeral=True)
-
-    @app_commands.command(
+    @ticket_operations.command(
         name="open_ticket",
         description="將生成一個新的開啟客服頻道之訊息。需要管理員權限才可使用。",
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def open_ticket(self, interaction: Interaction):
+        await interaction.response.defer(thinking=True, ephemeral=False)
         if not interaction.guild:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 content="Please try again.", ephemeral=True
             )
         cus_service_role = await try_get_role(
@@ -342,75 +326,70 @@ class TicketsCog(Cog):
             guild=interaction.guild, channel_id=cmd_channel_id
         )
         if not cus_service_role or not cmd_channel:
-            return await interaction.response.send_message(
+            return await interaction.followup.send(
                 content="Please try again.", ephemeral=True
             )
         if not isinstance(interaction.channel, TextChannel):
-            return await interaction.response.send_message(
-                "You should put this message in a text channel."
+            return await interaction.followup.send(
+                "You should put this message in a text channel.", ephemeral=True
             )
-        await interaction.response.defer(thinking=True, ephemeral=False)
         try:
-            assert isinstance(cmd_channel, TextChannel)
-            panel = await self.ticket_manager.database_manager.select(
-                table_name=self.ticket_manager.ticket_panels_table_name,
-                criteria={"guild_id": interaction.guild.id},
-                fetch_one=True,
-            )
-            if panel:
-                assert isinstance(panel, dict)
+            if panel := await self.ticket_panel_manager.get_panel(
+                guild_id=interaction.guild.id,
+                channel_id=None,
+                message_id=None,
+            ):
+                print(panel)
                 panel_cnl = await try_get_channel(
-                    guild=interaction.guild, channel_id=panel["channel_id"]
+                    guild=interaction.guild, channel_id=panel.channel_id
                 )
                 assert isinstance(panel_cnl, TextChannel)
                 panel_msg = await try_get_message(
-                    channel=panel_cnl, message_id=panel["message_id"]
+                    channel=panel_cnl, message_id=panel.message_id
                 )
-                if panel_msg:
-                    return await interaction.followup.send(
-                        content=f"There should only exist one open message for each guild. The url of the open message in your guild is {panel_msg.jump_url}"
-                    )
-                else:
-                    # If the message is not found, we can safely create a new one.
-                    await self.ticket_manager.database_manager.delete(
-                        table_name=self.ticket_manager.ticket_panels_table_name,
-                        criteria={"guild_id": interaction.guild.id},
-                    )
-            view = TicketCreationView(ticket_manager=self.ticket_manager)
-            embed = create_themed_embed(
-                title="【DRAGON龍龍】客服專區",
-                description="請點下方按鈕開啟客服頻道，點擊後會開啟一個只有您跟客服人員才看的到的私人頻道，即可至開啟的頻道傳送訊息，謝謝您。",
-            )
-            embed.url = "https://dragonshop.org/"
-            embed.set_image(url="https://i.imgur.com/AgKFvBT.png")
-            await interaction.followup.send(
-                content=ticket_system_main_message(
-                    role=cus_service_role, cmd_channel=cmd_channel
-                ),
-                view=view,
-                embed=embed,
-            )
-            msg = await interaction.original_response()
-            await self.ticket_manager.database_manager.update(
-                table_name=self.ticket_manager.ticket_panels_table_name,
-                data={
-                    "channel_id": interaction.channel_id,
-                    "message_id": msg.id,
-                },
-                criteria={"guild_id": interaction.guild_id},
-            )
-            self.panel_messages[interaction.guild.id] = PanelMessageData(
+                assert isinstance(panel_msg, Message) or isinstance(
+                    panel_msg, PartialMessage
+                )
+                return await interaction.followup.send(
+                    content=f"There should only exist one open message for each guild. The url of the open message in your guild is {panel_msg.jump_url}",
+                    ephemeral=True,
+                )
+        except AssertionError:
+            # This means at least one of the values, panel_cnl or panel_msg is None, which means the message is not found.
+            pass
+            # If the message is not found, we can safely create a new one.
+        # First we delete the record.
+        # Since panel should be unique per guild, we can just delete by guild_id.
+        await self.ticket_panel_manager.delete_panel_by_guild_id(
+            guild_id=interaction.guild.id
+        )
+
+        view = TicketCreationView(ticket_manager=self.ticket_manager)
+        embed = create_themed_embed(
+            title="【DRAGON龍龍】客服專區",
+            description="請點下方按鈕開啟客服頻道，點擊後會開啟一個只有您跟客服人員才看的到的私人頻道，即可至開啟的頻道傳送訊息，謝謝您。",
+        )
+        embed.url = "https://dragonshop.org/"
+        embed.set_image(url="https://i.imgur.com/AgKFvBT.png")
+        assert isinstance(cmd_channel, TextChannel)
+        await interaction.followup.send(
+            content=ticket_system_main_message(
+                role=cus_service_role, cmd_channel=cmd_channel
+            ),
+            view=view,
+            embed=embed,
+            ephemeral=False,
+        )
+        msg = await interaction.original_response()
+        await self.ticket_panel_manager.insert_or_update_panel(
+            panel_message_data=PanelMessageData(
                 guild_id=interaction.guild.id,
                 channel_id=interaction.channel.id,
                 message_id=msg.id,
             )
+        )
 
-        except AssertionError:
-            return await interaction.followup.send(
-                content="Please try again.", ephemeral=True
-            )
-
-    @app_commands.command(
+    @ticket_operations.command(
         name="add_participant",
         description="將使用者加入客服頻道，需要客服人員身份組才可使用。",
     )
@@ -440,7 +419,7 @@ class TicketsCog(Cog):
                 content="此指令只能在客服頻道中使用。", ephemeral=True
             )
 
-    @app_commands.command(name="archive_ticket", description="將客服頻道歸檔。")
+    @ticket_operations.command(name="archive_ticket", description="將客服頻道歸檔。")
     @app_commands.checks.has_role(cus_service_role_id)
     @app_commands.guild_only()
     async def archive_ticket(self, interaction: Interaction):
@@ -464,7 +443,7 @@ class TicketsCog(Cog):
         except ChannelNotFound as e:
             return await interaction.response.send_message(content=e)
 
-    @app_commands.command(
+    @ticket_operations.command(
         name="remove_participant",
         description="將使用者移出客服頻道，需要客服人員身份組才可使用。",
     )
@@ -498,7 +477,7 @@ class TicketsCog(Cog):
                 content="此客服頻道已經沒有客戶了，你在幹麻？？？", ephemeral=True
             )
 
-    @app_commands.command(name="choose-抽獎", description="抽獎")
+    @ticket_operations.command(name="choose-抽獎", description="抽獎")
     @app_commands.guild_only()
     @app_commands.checks.has_role(cus_service_role_id)
     async def choose_sth(self, interaction: Interaction):
@@ -542,6 +521,13 @@ class TicketsCog(Cog):
         return await interaction.response.send_message(
             f"{members_mention}恭喜您抽中**{result}**！"
         )
+
+    @choose_sth.error
+    async def choose_sth_error(self, interaction: Interaction, error: AppCommandError):
+        if isinstance(error, MissingRole):
+            return await interaction.response.send_message(
+                "只有客服人員能夠使用此指令！", ephemeral=True
+            )
 
     @app_commands.command(name="r", description="回覆指令(只有客服人員能夠使用)")
     @app_commands.checks.has_role(cus_service_role_id)
@@ -591,13 +577,12 @@ class TicketsCog(Cog):
             "傳送完成", delete_after=3, ephemeral=True
         )
 
-    @r.error
-    async def r_error(self, interaction: Interaction, error: AppCommandError):
-        if isinstance(error, MissingRole):
-            return await interaction.response.send_message(
-                "只有客服人員能夠使用此指令！", ephemeral=True
-            )
-
 
 async def setup(client):
-    await client.add_cog(TicketsCog(bot=client, ticket_manager=client.ticket_manager))
+    await client.add_cog(
+        TicketsCog(
+            bot=client,
+            ticket_manager=client.ticket_manager,
+            ticket_panel_manager=client.ticket_panel_manager,
+        )
+    )
