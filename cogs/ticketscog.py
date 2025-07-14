@@ -135,12 +135,14 @@ class TicketsCog(Cog):
             view = TicketCreationView(ticket_manager=self.ticket_manager)
             try:
                 await message.edit(view=view)
-            except (discord.errors.NotFound, discord.errors.HTTPException):
+            except discord.errors.NotFound:
                 print("The message might have been deleted.")
                 assert message.channel.guild
                 await self.ticket_panel_manager.delete_panel_by_guild_id(
                     guild_id=message.channel.guild.id,
                 )
+            except Exception as e:
+                print(e)
 
         print("Done!")
 
