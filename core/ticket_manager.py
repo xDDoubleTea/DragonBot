@@ -749,6 +749,8 @@ class TicketManager:
             print(
                 f"Error: {e}. The channel with the ticket's channel_id was not found in the guild."
             )
+            # We delete the record in the cache since the ticket should likely have been deleted
+            self.ticket_caches.pop(ticket.db_id)
             raise e
 
     async def set_ticket_channel_name(
@@ -765,8 +767,13 @@ class TicketManager:
         Returns:
             None, if everything works fine.
         """
-        ticket_channel = await self._try_get_channel_by_bot(
-            channel_id=ticket.channel_id
+        ticket_guild = await try_get_guild(bot=self.bot, guild_id=ticket.guild_id)
+        if not ticket_guild:
+            raise TicketNotFound(
+                f"Ticket channel with ID {ticket.channel_id} not found in the guild with ID {ticket.guild_id}."
+            )
+        ticket_channel = await try_get_channel(
+            guild=ticket_guild, channel_id=ticket.channel_id
         )
         if not ticket_channel:
             raise TicketNotFound(
@@ -774,6 +781,12 @@ class TicketManager:
             )
         assert isinstance(ticket_channel, TextChannel)
         status_name = ticket.status.string_repr
-        await ticket_channel.edit(
-            name=f"{ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}"
-        )
+        try:
+            # Just to be really safe.
+            await ticket_channel.edit(
+                name=f"{ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}"
+            )
+        except (discord.errors.HTTPException, discord.errors.NotFound):
+            raise TicketNotFound(
+                f"Ticket channel with ID {ticket.channel_id} not found in the guild with ID {ticket.guild_id}."
+            )
