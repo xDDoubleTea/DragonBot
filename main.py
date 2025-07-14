@@ -11,11 +11,16 @@ from config import (
     db_url,
     MY_GUILD,
 )
+<<<<<<< HEAD
 from core.bug_reporter import BugReporter
+=======
+from core.feedback_manager import FeedbackManager
+>>>>>>> bdef2810bcd302c4cddc81c13eb36ecfdca439b7
 from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
-from db.database_manager import DatabaseManager, AsyncDatabaseManager
+from core.ticket_panel_manager import TicketPanelManager
+from db.database_manager import AsyncDatabaseManager, DatabaseManager
 
 
 class DragonBot(commands.Bot):
@@ -29,9 +34,20 @@ class DragonBot(commands.Bot):
             application_id=app_id,
         )
         assert db_url is not None
+
         self.db_manager = DatabaseManager(database_url=db_url)
+        # Maybe we will need the Synchrounus database manager one day.
+
         self.async_db_manager = AsyncDatabaseManager(db_url=db_url)
+        self.feedback_manager = FeedbackManager(
+            bot=self, database_manager=self.async_db_manager
+        )
         self.ticket_manager = TicketManager(
+            bot=self,
+            database_manager=self.async_db_manager,
+            feedback_manager=self.feedback_manager,
+        )
+        self.ticket_panel_manager = TicketPanelManager(
             bot=self, database_manager=self.async_db_manager
         )
         self.keyword_manager = KeywordManager(

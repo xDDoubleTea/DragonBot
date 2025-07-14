@@ -1,7 +1,7 @@
 from enum import IntEnum, StrEnum, Enum
 from typing import List, Optional, Dict, Set
 from dataclasses import dataclass, field
-
+from datetime import datetime
 from discord import Client, Color, Guild, TextChannel
 
 __all__ = [
@@ -20,6 +20,8 @@ __all__ = [
     "RoleRequestStatus",
     "RoleRequestChannelType",
     "RoleRequestData",
+    "PanelMessageData",
+    "FeedbackStats",
 ]
 
 
@@ -221,3 +223,33 @@ class PanelMessageData:
     guild_id: int
     channel_id: int
     message_id: int
+
+
+@dataclass
+class FeedbackEntry:
+    ticket_id: int
+    guild_id: int
+    customer_id: int
+    rating: int
+    created_at: datetime | None = None
+    feedback_messages: str = ""
+
+
+@dataclass
+class FeedbackStats:
+    average_rating: float
+    total_ratings: int
+    five_star_ratings: int
+    four_star_ratings: int
+    three_star_ratings: int
+    two_star_ratings: int
+    one_star_ratings: int
+
+
+@dataclass
+class FeedbackLeaderboardEntry:
+    """Represents a single user's entry on the feedback leaderboard."""
+
+    customer_id: int
+    feedback_count: int
+    average_rating: float
