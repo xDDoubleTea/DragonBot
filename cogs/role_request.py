@@ -343,7 +343,7 @@ class RoleRequest(Cog):
                 f"此頻道不可使用此指令！請至{request_channel.mention}頻道使用",
                 ephemeral=True,
             )
-        if set(map(lambda role: role.id, interaction.user.roles)).isdisjoint(
+        if not set(map(lambda role: role.id, interaction.user.roles)).isdisjoint(
             set(
                 await self.role_request_manager.get_requestable_roles(
                     guild_id=interaction.guild.id
