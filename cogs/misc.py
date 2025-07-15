@@ -1,4 +1,3 @@
-from bs4.element import NavigableString, PageElement
 from discord.ext.commands import Bot, Cog, CommandError, Context
 from discord.ext import commands
 from discord import app_commands, Interaction
