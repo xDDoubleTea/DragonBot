@@ -2,6 +2,7 @@ import io
 import discord
 from discord import Guild, User, Member, Embed, TextChannel, Client
 from discord.abc import GuildChannel
+import functools
 from typing import Union, List, Optional, Dict, Set
 from discord.ext.commands import Bot
 from discord.ext.commands.errors import ChannelNotFound
@@ -20,9 +21,9 @@ from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFoun
 from config.constants import (
     cus_service_role_id,
     eng_to_chinese,
-    bot_token,
     THEME_COLOR,
     archive_channel_id,
+    exporter_bot_token,
 )
 
 import asyncio
@@ -215,8 +216,11 @@ class TicketManager:
         assert isinstance(channel, TextChannel)
         transcript_bytes: bytes
         with tempfile.TemporaryDirectory() as temp_dir:
-            transcript_path_str = await self._run_archive_exporter_sync(
-                channel.id, temp_dir
+            exporter_sync = functools.partial(
+                self._run_archive_exporter_sync, channel_id, temp_dir
+            )
+            transcript_path_str = await self.bot.loop.run_in_executor(
+                None, exporter_sync
             )
             transcript_path = pathlib.Path(transcript_path_str)
             transcript_bytes = transcript_path.read_bytes()
@@ -551,26 +555,23 @@ class TicketManager:
 
         return new_channel
 
-    async def _run_archive_exporter_sync(self, channel_id: int, temp_dir: str) -> str:
+    def _run_archive_exporter_sync(self, channel_id: int, temp_dir: str) -> str:
         """
         A synchronous, blocking function that runs the chat exporter.
         This is designed to be run in an executor.
         It returns the path to the exported file.
         """
         output_path = pathlib.Path(temp_dir)
-        assert bot_token
-
         command = [
             "vendor/DiscordChatExporterCLI/DiscordChatExporter.Cli",
             "export",
             "--channel",
             str(channel_id),
             "--token",
-            bot_token,
+            exporter_bot_token,
             "--output",
             str(output_path),
         ]
-
         # This is the blocking call
         subprocess.run(command, capture_output=True, text=True, check=True)
 

@@ -1,6 +1,5 @@
 import discord
-from discord import Interaction, TextChannel, InteractionMessage
-from discord.errors import Forbidden
+from discord import Interaction, TextChannel
 from discord.ui import Modal, View, button, Button, TextInput
 
 from config.models import CloseMessageType, TicketType
@@ -190,8 +189,7 @@ class TicketCloseToggleView(View):
             and interaction.channel
             and isinstance(interaction.channel, TextChannel)
         )
-        button.disabled = True
-
+        await interaction.message.edit(view=None)
         resp = await interaction.response.send_message(
             content="你確定你想要關閉此頻道?",
             view=TicketCloseView(ticket_manager=self.ticket_manager),
