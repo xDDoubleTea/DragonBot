@@ -569,15 +569,12 @@ class TicketsCog(Cog):
             final_response = f"""{", ".join(map(lambda participant: participant.mention, participants))} 
 {final_response}"""
 
-        await interaction.channel.send(final_response)
+        await interaction.response.send_message(final_response)
 
         if reply in {ReplyKeys.CLOSE_PROMPT, ReplyKeys.DONE_PROCESS}:
             await self.ticket_manager.set_ticket_status(
                 ticket=ticket, new_status=TicketStatus.RESOLVED
             )
-        return await interaction.response.send_message(
-            "傳送完成", delete_after=3, ephemeral=True
-        )
 
 
 async def setup(client):

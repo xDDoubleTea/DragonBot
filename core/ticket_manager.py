@@ -617,7 +617,6 @@ class TicketManager:
                 )
             # Generate the channel history archive
         customers_mention = customers_mention.rstrip(", ")
-        msg = await channel.send("頻道紀錄檔案生成中...")
         try:
             transcript_bytes: bytes
             transcript_bytes, filename = await self.archive_ticket(
@@ -650,13 +649,14 @@ class TicketManager:
 
             new = await archive_channel.send(embed=archive_embed, file=transcript_file)
 
-            msg = await msg.edit(content="生成完成✅傳送回饋單給客戶中...")
             view = FeedBackSystem(
                 ticket_id=ticket.db_id,
                 guild_id=ticket.guild_id,
                 feedback_manager=self.feedback_manager,
             )
             feedback_embed = feedbackEmbed(channel=channel, client=client)
+            assert feedback_embed.description
+            feedback_embed.description += "\n說明：點選星數來代表今天服務的滿意度"
             for customer in customers:
                 if customer:
                     try:
@@ -664,13 +664,9 @@ class TicketManager:
                             io.BytesIO(transcript_bytes), filename=filename
                         )
                         await customer.send(
-                            content="此為對話記錄檔案：",
-                            embed=archive_embed,
+                            content="此為對話記錄檔案以及回饋按鈕：",
+                            embeds=[archive_embed, feedback_embed],
                             file=customer_transcript_file,
-                        )
-                        await customer.send(
-                            content="說明：點選星數來代表今天服務的滿意度，而下拉式選單可選擇評語(若誤按或未使用服務請不用評價)",
-                            embed=feedback_embed,
                             view=view,
                         )
                     except discord.errors.Forbidden:
@@ -679,16 +675,15 @@ class TicketManager:
                         )
                     except Exception as e:
                         print(f"Error: {e}")
-            await msg.edit(content="傳送完成", delete_after=5)
         except subprocess.CalledProcessError as e:
             # This block will run if the exporter command fails
             print(f"Error exporting channel {channel.id}: {e}")
-            await msg.edit(content="錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
+            await channel.send(content="錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
             raise Exception("錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
         except FileNotFoundError:
             # This block will run if the DiscordChatExporter.Cli executable is not found
             print("Error: DiscordChatExporter.Cli not found.")
-            await msg.edit(content="錯誤：找不到匯出工具。")
+            await channel.send(content="錯誤：找不到匯出工具。")
             raise FileNotFoundError("Error: DiscordChatExporter.Cli not found.")
 
     async def delete_ticket(self, channel: TextChannel):
