@@ -2,56 +2,58 @@ from discord.ext.commands import Bot, Cog, CommandError, Context
 from discord.ext import commands
 from discord import app_commands, Interaction
 from discord.abc import GuildChannel, Messageable
-from typing import Literal, Union, Optional
-import requests
-import bs4
-from config.constants import currency_information_url
+from typing import Literal, Optional
+from config.models import CurrencyIndex
 from core.keyword_manager import KeywordManager
 from core.ticket_manager import TicketManager
 from main import DragonBot
 from utils.checks import IsNotDev, is_me_app_command, is_me_command
 from utils.discord_utils import try_get_channel_by_bot
+from core import CurrencyManager
+from utils.transformers import CurrencyTransformer
+import intervals
 
 
 class misc(Cog):
     def __init__(
-        self, bot: Bot, ticket_manager: TicketManager, keyword_manager: KeywordManager
+        self,
+        bot: Bot,
+        ticket_manager: TicketManager,
+        keyword_manager: KeywordManager,
+        currency_manager: CurrencyManager,
     ):
         self.bot = bot
         self.ticket_manager = ticket_manager
         self.keyword_manager = keyword_manager
+        self.currency_manager = currency_manager
 
-    async def get_currency(self, cur: str) -> Union[None, float]:
-        url = currency_information_url
-        req = requests.get(url)
-        soup = bs4.BeautifulSoup(req.text, "html.parser")
-
-        tbody = soup.find("tbody")
-        all_rate = tbody.find_all("tr")
-
-        type = "即期"
-        index = 0
-        if cur == "eur":
-            index = 14
-        elif cur != "usd":
-            return None
-        cur_info = (
-            all_rate[index]
-            .select_one(f'td[data-table="本行{type}賣出"].print_width')
-            .string.strip()
-        )
-        return float(cur_info)
+    @app_commands.command(name="set_tax", description="設置匯率轉換後要加多少錢")
+    @app_commands.describe(
+        lower_bound="定義從哪裡開始要加多少錢，未填或填入負數則自動設為0",
+        upper_bound="定義到哪裡為止要加多少錢，未填則表示沒有上界",
+        tax="（轉換之後）要加多少錢（臺幣）",
+    )
+    async def set_tax(
+        self,
+        interaction: Interaction,
+        lower_bound: Optional[int],
+        upper_bound: Optional[int],
+        tax: int,
+    ):
+        pass
 
     @app_commands.command(name="convert", description="匯率轉換指令，將輸入轉換為NTD")
     @app_commands.describe(
-        type='輸入匯率，目前支援usd與eur，輸入"u", "us", "usd" 或 "e", "eu", "eur"分別表示美元與歐元(大小寫不限)',
+        cur_type="輸入匯率",
         show_result_public="是否要使所有人看見。輸入y, n分別表示是或否，預設為否",
     )
     async def cur_convert(
         self,
         interaction: Interaction,
         amount: float,
-        type: Literal["usd", "eur"],
+        cur_type: app_commands.Transform[
+            CurrencyIndex, CurrencyTransformer(CurrencyIndex)
+        ],
         show_result_public: Literal["y", "n"] = "n",
     ):
         output = 0
@@ -61,10 +63,8 @@ class misc(Cog):
             return await interaction.response.send_message(
                 "請輸入一數字！", ephemeral=True
             )
-        cur = "usd"
-        if type.lower() in {"e", "eu", "eur"}:
-            cur = "eur"
-        currency = await self.get_currency(cur=cur)
+
+        currency = await self.currency_manager.get_currency(cur=cur_type)
         if not currency:
             return await interaction.response.send_message(
                 "台灣銀行爬蟲網站爆炸了...", ephemeral=True
@@ -180,5 +180,6 @@ async def setup(client: DragonBot):
             bot=client,
             ticket_manager=client.ticket_manager,
             keyword_manager=client.keyword_manager,
+            currency_manager=client.currency_manager,
         )
     )

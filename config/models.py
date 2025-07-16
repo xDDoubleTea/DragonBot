@@ -3,6 +3,7 @@ from typing import List, Optional, Dict, Set
 from dataclasses import dataclass, field
 from datetime import datetime
 from discord import Client, Color, Guild, TextChannel
+from intervals import IntervalDict
 
 __all__ = [
     "TicketStatus",
@@ -245,6 +246,25 @@ class FeedbackStats:
     three_star_ratings: int
     two_star_ratings: int
     one_star_ratings: int
+
+
+class CurrencyIndex(Enum):
+    """
+    Represents the index of a currency in the website to crawl.
+    """
+
+    USD = 0, "美元"
+    EUR = 14, "歐元"
+
+    def __init__(self, index: int, string_repr: str):
+        self.index = index
+        self.string_repr = string_repr
+
+
+@dataclass
+class CurrencyTransformation:
+    guild_id: int
+    taxes_info: IntervalDict
 
 
 @dataclass

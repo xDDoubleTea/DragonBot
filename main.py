@@ -12,6 +12,7 @@ from config import (
     MY_GUILD,
 )
 from core.feedback_manager import FeedbackManager
+from core.misc.currency_manager import CurrencyManager
 from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
@@ -50,6 +51,9 @@ class DragonBot(commands.Bot):
             bot=self, database_manager=self.async_db_manager
         )
         self.role_request_manager = RoleRequestManager(
+            bot=self, database_manager=self.async_db_manager
+        )
+        self.currency_manager = CurrencyManager(
             bot=self, database_manager=self.async_db_manager
         )
 
