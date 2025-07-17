@@ -2,7 +2,7 @@ import discord
 from discord import Interaction, TextChannel
 from discord.ui import Modal, View, button, Button, TextInput
 
-from config.models import CloseMessageType, TicketType
+from config.models import CloseMessageType, TicketStatus, TicketType
 from core.ticket_manager import TicketManager
 from config.constants import DS01, DISCORD_EMOJI
 from core.exceptions import ChannelCreationFail
@@ -195,6 +195,13 @@ class TicketCloseToggleView(View):
             view=TicketCloseView(ticket_manager=self.ticket_manager),
         )
         assert resp.message_id
+        ticket = await self.ticket_manager.get_ticket(channel_id=interaction.channel_id)
+        assert ticket
+        # This button can only be inside a ticket channel
+        if ticket.status in {TicketStatus.OPEN, TicketStatus.IN_PROGRESS}:
+            await self.ticket_manager.set_ticket_status(
+                ticket=ticket, new_status=TicketStatus.RESOLVED
+            )
         await self.ticket_manager.set_close_msg_id(
             channel_id=interaction.channel.id,
             close_msg_id=resp.message_id,
@@ -254,6 +261,12 @@ class TicketCloseView(View):
         await interaction.response.send_message(
             content="關閉頻道已取消。", ephemeral=True
         )
+        ticket = await self.ticket_manager.get_ticket(channel_id=interaction.channel_id)
+        assert ticket
+        if ticket.status == TicketStatus.RESOLVED:
+            await self.ticket_manager.set_ticket_status(
+                ticket=ticket, new_status=TicketStatus.IN_PROGRESS
+            )
         await self.ticket_manager.set_close_msg_id(
             channel_id=interaction.channel.id,
             close_msg_id=interaction.message.id,
