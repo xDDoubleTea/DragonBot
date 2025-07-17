@@ -168,7 +168,7 @@ class FeedbackManager:
             GROUP BY
                 customer_id
             ORDER BY
-                feedback_count DESC, average_rating DESC
+                average_rating DESC, feedback_count DESC
             LIMIT $2;
             """
         if not self.database_manager._pool:
