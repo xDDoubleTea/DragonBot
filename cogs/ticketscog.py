@@ -9,7 +9,7 @@ from discord import (
 import discord
 import io
 import random
-from discord.app_commands import MissingRole
+from discord.app_commands import CommandOnCooldown, MissingRole
 from discord.app_commands.errors import AppCommandError, MissingPermissions
 from discord.ext import commands
 from discord.ext.commands import Cog
@@ -86,6 +86,11 @@ class TicketsCog(Cog):
             await interaction.response.send_message(
                 "只有客服人員才能使用此指令！", ephemeral=True
             )
+        elif isinstance(error, CommandOnCooldown):
+            await interaction.response.send_message(
+                f"這個指令有冷卻時間，請稍等{round(error.retry_after, 1)}秒後再試",
+                ephemeral=True,
+            )
         else:
             # For other errors, you can log them or send a generic message
             print(f"An unhandled error occurred in RoleRequest cog: {error}")
@@ -135,12 +140,14 @@ class TicketsCog(Cog):
             view = TicketCreationView(ticket_manager=self.ticket_manager)
             try:
                 await message.edit(view=view)
-            except (discord.errors.NotFound, discord.errors.HTTPException):
+            except discord.errors.NotFound:
                 print("The message might have been deleted.")
                 assert message.channel.guild
                 await self.ticket_panel_manager.delete_panel_by_guild_id(
                     guild_id=message.channel.guild.id,
                 )
+            except Exception as e:
+                print(e)
 
         print("Done!")
 
@@ -421,6 +428,7 @@ class TicketsCog(Cog):
 
     @ticket_operations.command(name="archive_ticket", description="將客服頻道歸檔。")
     @app_commands.checks.has_role(cus_service_role_id)
+    @app_commands.checks.cooldown(1, 600.0, key=lambda i: (i.guild_id, i.channel_id))
     @app_commands.guild_only()
     async def archive_ticket(self, interaction: Interaction):
         assert interaction.channel
@@ -567,15 +575,12 @@ class TicketsCog(Cog):
             final_response = f"""{", ".join(map(lambda participant: participant.mention, participants))} 
 {final_response}"""
 
-        await interaction.channel.send(final_response)
+        await interaction.response.send_message(final_response)
 
         if reply in {ReplyKeys.CLOSE_PROMPT, ReplyKeys.DONE_PROCESS}:
             await self.ticket_manager.set_ticket_status(
                 ticket=ticket, new_status=TicketStatus.RESOLVED
             )
-        return await interaction.response.send_message(
-            "傳送完成", delete_after=3, ephemeral=True
-        )
 
 
 async def setup(client):

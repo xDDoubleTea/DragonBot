@@ -1,4 +1,3 @@
-from bs4.element import NavigableString, PageElement
 from discord.ext.commands import Bot, Cog, CommandError, Context
 from discord.ext import commands
 from discord import app_commands, Interaction
@@ -12,7 +11,6 @@ from core.ticket_manager import TicketManager
 from main import DragonBot
 from utils.checks import IsNotDev, is_me_app_command, is_me_command
 from utils.discord_utils import try_get_channel_by_bot
-from decimal import Decimal
 
 
 class misc(Cog):
@@ -29,11 +27,6 @@ class misc(Cog):
         soup = bs4.BeautifulSoup(req.text, "html.parser")
 
         tbody = soup.find("tbody")
-        assert (
-            tbody
-            and not isinstance(tbody, NavigableString)
-            and not isinstance(tbody, PageElement)
-        )
         all_rate = tbody.find_all("tr")
 
         type = "即期"
@@ -105,11 +98,6 @@ class misc(Cog):
                 "請輸入y或n！", ephemeral=True
             )
         await interaction.response.send_message(content=f"NTD ${output}", ephemeral=eph)
-        try:
-            msg = await interaction.original_response()
-            return await msg.add_reaction("💱")
-        except Exception as e:
-            print(f"Error in cur_convert: {e}")
 
     @app_commands.command(name="ping", description="Is the bot alive? Pings the bot.")
     async def ping(self, interaction: Interaction):

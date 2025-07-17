@@ -146,6 +146,8 @@ class FeedBackSystem(View):
         else:
             avg_rating = round(avg_rating, 1)
         new_name = f"⭐評價{avg_rating}星"
+        if feed_back_channel.topic:
+            new_name = feed_back_channel.topic.split("⭐")[0] + new_name
         await feed_back_channel.edit(topic=new_name)
         await feed_back_channel.send(embed=embed)
         await interaction.user.send(
