@@ -2,13 +2,56 @@
 
 <!--toc:start-->
 - [Dragon Bot Documentation](#dragon-bot-documentation)
+- [Ticket System](#ticket-system)
+  - [Subsystem](#subsystem)
+- [Keyword System](#keyword-system)
+- [Role Requesting System](#role-requesting-system)
+- [TODOs](#todos)
+  - [Bug reporting system](#bug-reporting-system)
+    - [Proposal](#proposal)
 <!--toc:end-->
 
 Welcome to the Dragon Bot Documentation. This discord Bot is crafted specifically for the server [Dragon龍龍]( https://discord.com/invite/d84bdeR ).
 
 # Ticket System
 
-The flow chart of the ticket system: TBA
+The flow chart (simplified, for detailed look at the dedicated page.) of the ticket system:
+
+```mermaid
+flowchart TD
+userinteract( User clicks create ticket button )
+
+sendmodal[Sends a modal to user]
+createticket[Bot opens a ticket]
+confirmmessage[Bot sends a confirm message]
+closechannel[Bot closes the channel]
+deletechannel[Bot deletes channel]
+
+
+waitresponse{Waits for modal response}
+openstate{TicketStatus.OPEN}
+inprogress{TicketStatus.IN_PROGRESS}
+resolved{TicketStatus.RESOLVED}
+closed{TicketStatus.CLOSED}
+
+userinteract-->sendmodal-->waitresponse
+waitresponse-->|Gets User Response|createticket-->openstate
+waitresponse-->|No Response|donothing[Do nothing]
+
+openstate-->|Staff sends message| inprogress
+
+openstate-->|Close toggle button is pressed|confirmmessage
+inprogress-->|Close toggle button is pressed|confirmmessage
+
+confirmmessage-->resolved
+
+resolved-->|Close button is pressed|closechannel-->closed
+resolved-->|Cancel button is pressed|inprogress
+
+closed-->|Delete button is pressed|deletechannel
+closed-->|Reopen button is pressed|inprogress
+
+```
 
 > This system is generalized to work across multiple servers , though the ticket id is not unique now.
 

@@ -2,6 +2,11 @@ site_name: DragonBot documentation
 theme:
   name: material
   palette: 
+    # Palette toggle for dark mode
+    - scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
     # Palette toggle for light mode
     - scheme: default
       toggle:
@@ -10,11 +15,12 @@ theme:
 
         name: Switch to dark mode
 
-    # Palette toggle for dark mode
-    - scheme: slate
-      toggle:
-        icon: material/brightness-4
-        name: Switch to light mode
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
 nav:
   - 'Home': 'index.md'
   - 'Database': 'DATABASE.md'
