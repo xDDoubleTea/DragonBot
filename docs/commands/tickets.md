@@ -84,6 +84,8 @@ Sends a archive of the ticket. Can only be used in a ticket channel.
 **Parameter Descriptions:**  
 None
 
+> Note: This command has a cooldown of 10 minutes as it will make a lot of API calls.
+
 ## r (Canned Response)
 
 *(Staff Command)*
