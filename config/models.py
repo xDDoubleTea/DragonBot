@@ -254,3 +254,22 @@ class FeedbackLeaderboardEntry:
     customer_id: int
     feedback_count: int
     average_rating: float
+
+
+class FeedbackPromptMessageType(Enum):
+    RATING = (0, "評價")
+    SELECT = (1, "評語")
+
+    def __init__(self, db_id: int, string_repr: str):
+        self.db_id = db_id
+        self.string_repr = string_repr
+
+
+@dataclass
+class FeedbackPrompt:
+    user_id: int
+    guild_id: int
+    ticket_id: int
+    message_id: int
+    channel_id: int
+    message_type: FeedbackPromptMessageType

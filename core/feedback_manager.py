@@ -4,9 +4,15 @@ from discord import Client, Embed, Guild
 from discord.ext.commands import Bot
 from core.exceptions import DBNotInit
 from db.database_manager import AsyncDatabaseManager
-from config.models import FeedbackEntry, FeedbackLeaderboardEntry, FeedbackStats
+from config.models import (
+    FeedbackEntry,
+    FeedbackLeaderboardEntry,
+    FeedbackPrompt,
+    FeedbackPromptMessageType,
+    FeedbackStats,
+)
 from utils.embed_utils import add_std_footer, create_themed_embed
-from utils.discord_utils import try_get_member
+from utils.discord_utils import try_get_member, try_get_message, try_get_user
 
 
 class NotEnoughFeedbacks(Exception):
@@ -18,6 +24,7 @@ class FeedbackManager:
         self.bot = bot
         self.database_manager = database_manager
         self.feedbacks_table_name = "feedbacks"
+        self.feedback_prompts_table_name = "feedback_prompts"
         self.average_rating_cache: Dict[int, float] = dict()
         self.total_ratings_cache: Dict[int, int] = dict()
 
@@ -34,6 +41,55 @@ class FeedbackManager:
     #             distinct_guild_counts = stats_row["unique_guild_count"]
     #     if not distinct_guild_counts:
     #         return
+
+    async def insert_feedback_prompt(
+        self,
+        user_id: int,
+        ticket_id: int,
+        guild_id: int,
+        message_id: int,
+        channel_id: int,
+        message_type: FeedbackPromptMessageType,
+    ):
+        try:
+            await self.database_manager.insert(
+                table_name=self.feedback_prompts_table_name,
+                data={
+                    "user_id": user_id,
+                    "ticket_id": ticket_id,
+                    "guild_id": guild_id,
+                    "message_id": message_id,
+                    "channel_id": channel_id,
+                    "message_type": message_type,
+                },
+                returning_col="user_id",
+            )
+        except asyncpg.UniqueViolationError:
+            pass
+
+    async def remove_user_feedback_prompt(
+        self, user_id: int, ticket_id: int, guild_id: int
+    ):
+        await self.database_manager.delete(
+            table_name=self.feedback_prompts_table_name,
+            criteria={"user_id": user_id, "ticket_id": ticket_id, "guild_id": guild_id},
+        )
+
+    async def get_all_feedback_prompts(self) -> List[FeedbackPrompt]:
+        raw_data = await self.database_manager.select(
+            table_name=self.feedback_prompts_table_name
+        )
+        return [
+            FeedbackPrompt(
+                user_id=data["user_id"],
+                guild_id=data["guild_id"],
+                ticket_id=data["ticket_id"],
+                message_id=data["message_id"],
+                channel_id=data["channel_id"],
+                message_type=data["message_type"],
+            )
+            for data in raw_data
+        ]
 
     async def insert_feedback_entry(self, feedback_entry: FeedbackEntry):
         try:

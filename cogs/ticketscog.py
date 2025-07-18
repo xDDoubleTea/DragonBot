@@ -28,12 +28,19 @@ from config.constants import (
     rare_dragon_role_id,
     app_id,
 )
-from config.models import CloseMessageType, PanelMessageData, TicketStatus
+from config.models import (
+    CloseMessageType,
+    FeedbackPromptMessageType,
+    PanelMessageData,
+    TicketStatus,
+)
 from config.canned_response import CANNED_RESPONSES
 from core.exceptions import ChannelNotTicket, NoParticipants
+from core.feedback_manager import FeedbackManager
 from core.ticket_manager import TicketManager
 from core.ticket_panel_manager import TicketPanelManager
 from utils.embed_utils import create_themed_embed
+from view.feedback_views import FeedBackSystem, words_selction
 from view.ticket_views import (
     TicketAfterClose,
     TicketCloseToggleView,
@@ -47,6 +54,7 @@ from utils.discord_utils import (
     try_get_channel,
     try_get_guild,
     try_get_role,
+    try_get_user,
 )
 
 
@@ -61,10 +69,12 @@ class TicketsCog(Cog):
         bot: commands.Bot,
         ticket_manager: TicketManager,
         ticket_panel_manager: TicketPanelManager,
+        feedback_manager: FeedbackManager,
     ):
         self.bot = bot
         self.ticket_manager = ticket_manager
         self.ticket_panel_manager = ticket_panel_manager
+        self.feedback_manager = feedback_manager
         self.panel_messages: Dict[int, PanelMessageData] = (
             self.ticket_panel_manager.ticket_panels
         )
@@ -97,6 +107,77 @@ class TicketsCog(Cog):
                 await interaction.followup.send(
                     f"發生未知的錯誤: {error}", ephemeral=True
                 )
+
+    async def restore_feedback_prompt_view(self):
+        print("Restoring feedback prompts.")
+        prompts = await self.feedback_manager.get_all_feedback_prompts()
+        if not prompts:
+            print("Nothing to restore...Skipping")
+            return
+        for prompt in prompts:
+            user = await try_get_user(bot=self.bot, user_id=prompt.user_id)
+            if not user:
+                print(f"User with id {prompt.user_id} not found, skipping.")
+                await self.feedback_manager.remove_user_feedback_prompt(
+                    user_id=prompt.user_id,
+                    ticket_id=prompt.ticket_id,
+                    guild_id=prompt.guild_id,
+                )
+                continue
+            dm_channel = user.dm_channel
+
+            if not dm_channel:
+                print(
+                    "User has no dm channel associated with the bot, maybe it has been deleted by user, skipping."
+                )
+                await self.feedback_manager.remove_user_feedback_prompt(
+                    user_id=prompt.user_id,
+                    ticket_id=prompt.ticket_id,
+                    guild_id=prompt.guild_id,
+                )
+                continue
+            if dm_channel.id != int(prompt.guild_id):
+                print(
+                    "The dm channel id is different from the record, this is unexpected, skipping for now."
+                )
+                await self.feedback_manager.remove_user_feedback_prompt(
+                    user_id=prompt.user_id,
+                    ticket_id=prompt.ticket_id,
+                    guild_id=prompt.guild_id,
+                )
+                continue
+            message = await try_get_message(
+                channel=dm_channel, message_id=prompt.message_id
+            )
+            if not message:
+                await self.feedback_manager.remove_user_feedback_prompt(
+                    user_id=prompt.user_id,
+                    ticket_id=prompt.ticket_id,
+                    guild_id=prompt.guild_id,
+                )
+                print(
+                    f"Message with ID {prompt.message_id} was not found in the dm channel, this is unexpected, skipping for now."
+                )
+                continue
+            try:
+                if prompt.message_type == FeedbackPromptMessageType.RATING:
+                    await message.edit(
+                        view=FeedBackSystem(
+                            ticket_id=prompt.ticket_id,
+                            guild_id=prompt.guild_id,
+                            feedback_manager=self.feedback_manager,
+                        )
+                    )
+                elif prompt.message_type == FeedbackPromptMessageType.SELECT:
+                    await message.edit(
+                        view=words_selction(
+                            ticket_id=prompt.ticket_id,
+                            guild_id=prompt.guild_id,
+                            feedback_manager=self.feedback_manager,
+                        )
+                    )
+            except discord.errors.NotFound:
+                pass
 
     @Cog.listener(name="on_ready")
     async def on_ready(self):
@@ -586,5 +667,6 @@ async def setup(client):
             bot=client,
             ticket_manager=client.ticket_manager,
             ticket_panel_manager=client.ticket_panel_manager,
+            feedback_manager=client.feedback_manager,
         )
     )

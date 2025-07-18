@@ -3,6 +3,8 @@ import discord
 from discord import Guild, Member, Role, PartialMessage, Message, TextChannel
 from discord.abc import GuildChannel
 from discord.ext.commands import Bot
+from discord.guild import DMChannel
+from discord.user import User
 
 
 async def get_or_fetch(
@@ -37,6 +39,15 @@ async def try_get_channel_by_bot(
         obj_id=channel_id,
         get_method_name="get_channel",
         fetch_method_name="fetch_channel",
+    )
+
+
+async def try_get_user(bot: discord.Client | Bot, user_id: int) -> Optional[User]:
+    return await get_or_fetch(
+        container=bot,
+        obj_id=user_id,
+        get_method_name="get_user",
+        fetch_method_name="fetch_user",
     )
 
 
@@ -79,7 +90,7 @@ async def try_get_role(guild: Guild, role_id: int) -> Optional[Role]:
 
 
 async def try_get_message(
-    channel: TextChannel, message_id: int
+    channel: TextChannel | DMChannel, message_id: int
 ) -> Optional[PartialMessage | Message]:
     return await get_or_fetch(
         container=channel,

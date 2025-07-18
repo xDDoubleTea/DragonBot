@@ -1,5 +1,14 @@
 # Dragon Bot
 
+<!--toc:start-->
+- [Dragon Bot](#dragon-bot)
+  - [Key Features](#key-features)
+  - [Setup & Installation (Self-Hosting)](#setup-installation-self-hosting)
+  - [Technology Stack](#technology-stack)
+  - [Documentation](#documentation)
+  - [Contributing](#contributing)
+<!--toc:end-->
+
 ![Bot Status](https://img.shields.io/badge/status-active-success)
 
 Dragon Bot is a multi-purpose Discord bot designed with a primary focus on providing a robust and user-friendly ticket management system. This project is a complete, from-scratch rewrite of the original `DragonBot_host` repository, built with modern `discord.py` features, a scalable architecture, and a strong emphasis on developer and user experience.
