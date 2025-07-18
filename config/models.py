@@ -264,6 +264,19 @@ class FeedbackPromptMessageType(Enum):
         self.db_id = db_id
         self.string_repr = string_repr
 
+    @classmethod
+    def from_id(cls, message_type_id: int) -> "FeedbackPromptMessageType":
+        """
+        Looks up an enum member by its integer ID.
+        Returns the TicketStatus member or None if the ID is not found.
+        """
+        # This is an efficient reverse lookup.
+        # We iterate through all members of the class (`cls`) and check their `id` attribute.
+        for member in cls:
+            if member.db_id == message_type_id:
+                return member
+        return cls.RATING  # Defaults to OPEN if no match is found, for safety.
+
 
 @dataclass
 class FeedbackPrompt:

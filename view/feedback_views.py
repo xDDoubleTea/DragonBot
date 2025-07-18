@@ -4,6 +4,7 @@ from discord import (
     Embed,
     Interaction,
     Member,
+    Message,
     SelectOption,
     TextChannel,
     TextStyle,
@@ -98,6 +99,7 @@ class FeedBackSystem(View):
         self.guild_id = guild_id
         self.user_id = user_id
         self.feedback_manager = feedback_manager
+        self.message: Message | None = None
         for i in range(1, 6):
             star_emoji = "⭐" * i
             btn = Button(
@@ -155,15 +157,18 @@ class FeedBackSystem(View):
             new_name = feed_back_channel.topic.split("⭐")[0] + new_name
         await feed_back_channel.edit(topic=new_name)
         await feed_back_channel.send(embed=embed)
-        msg = await interaction.user.send(
-            "若您有興趣的話，請選擇想與今天服務人員說的話，或點擊按鈕輸入(擇1)。",
-            view=words_selction(
-                user_id=self.user_id,
-                ticket_id=self.ticket_id,
-                guild_id=self.guild_id,
-                feedback_manager=self.feedback_manager,
-            ),
+        view = words_selction(
+            user_id=self.user_id,
+            ticket_id=self.ticket_id,
+            guild_id=self.guild_id,
+            feedback_manager=self.feedback_manager,
         )
+
+        msg = await interaction.user.send(
+            content="若您有興趣的話，請選擇想與今天服務人員說的話，或點擊按鈕輸入(擇1)。",
+            view=view,
+        )
+        view.message = msg
         await self.feedback_manager.update_feedback_prompt_msg_type(
             user_id=interaction.user.id,
             ticket_id=self.ticket_id,
@@ -177,6 +182,8 @@ class FeedBackSystem(View):
             if isinstance(child, Button):
                 child.disabled = True
                 child.label = "已逾期..."
+        assert self.message
+        await self.message.edit(view=self)
         await self.feedback_manager.remove_user_feedback_prompt(
             user_id=self.user_id, ticket_id=self.ticket_id, guild_id=self.guild_id
         )
@@ -193,6 +200,7 @@ class words_selction(View):
         self.user_id = user_id
         self.ticket_id = ticket_id
         self.guild_id = guild_id
+        self.message: Message | None = None
         self.feedback_manager = feedback_manager
         super().__init__(timeout=86400)
 
@@ -259,6 +267,9 @@ class words_selction(View):
                 child.label = "已逾期..."
             elif isinstance(child, Select):
                 child.placeholder = "已逾期..."
+                child.disabled = True
+        assert self.message
+        await self.message.edit(view=self)
         await self.feedback_manager.remove_user_feedback_prompt(
             user_id=self.user_id, ticket_id=self.ticket_id, guild_id=self.guild_id
         )

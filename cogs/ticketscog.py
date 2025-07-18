@@ -1,4 +1,5 @@
 from discord import (
+    DMChannel,
     Guild,
     Interaction,
     Member,
@@ -50,6 +51,7 @@ from view.ticket_views import (
 from typing import List, Union, Optional, Dict
 from utils.transformers import CannedResponseTransformer
 from utils.discord_utils import (
+    try_get_channel_by_bot,
     try_get_message,
     try_get_channel,
     try_get_guild,
@@ -129,7 +131,9 @@ class TicketsCog(Cog):
                     guild_id=prompt.guild_id,
                 )
                 continue
-            dm_channel = user.dm_channel
+            dm_channel = await try_get_channel_by_bot(
+                bot=self.bot, channel_id=prompt.channel_id
+            )
 
             if not dm_channel:
                 print(
@@ -141,16 +145,7 @@ class TicketsCog(Cog):
                     guild_id=prompt.guild_id,
                 )
                 continue
-            if dm_channel.id != int(prompt.guild_id):
-                print(
-                    "The dm channel id is different from the record, this is unexpected, skipping for now."
-                )
-                await self.feedback_manager.remove_user_feedback_prompt(
-                    user_id=prompt.user_id,
-                    ticket_id=prompt.ticket_id,
-                    guild_id=prompt.guild_id,
-                )
-                continue
+            assert isinstance(dm_channel, DMChannel)
             message = await try_get_message(
                 channel=dm_channel, message_id=prompt.message_id
             )
@@ -166,30 +161,38 @@ class TicketsCog(Cog):
                 continue
             try:
                 if prompt.message_type == FeedbackPromptMessageType.RATING:
-                    await message.edit(
-                        view=FeedBackSystem(
-                            user_id=prompt.user_id,
-                            ticket_id=prompt.ticket_id,
-                            guild_id=prompt.guild_id,
-                            feedback_manager=self.feedback_manager,
-                        )
+                    print(
+                        f"Restoring rating buttons for {user.name} with ticket id {prompt.ticket_id}."
                     )
+                    view = FeedBackSystem(
+                        user_id=prompt.user_id,
+                        ticket_id=prompt.ticket_id,
+                        guild_id=prompt.guild_id,
+                        feedback_manager=self.feedback_manager,
+                    )
+                    view.message = await message.edit(view=view)
                 elif prompt.message_type == FeedbackPromptMessageType.SELECT:
-                    await message.edit(
-                        view=words_selction(
-                            user_id=prompt.user_id,
-                            ticket_id=prompt.ticket_id,
-                            guild_id=prompt.guild_id,
-                            feedback_manager=self.feedback_manager,
-                        )
+                    print(
+                        f"Restoring drop down menu for {user.name} with ticket id {prompt.ticket_id}."
                     )
+
+                    view = words_selction(
+                        user_id=prompt.user_id,
+                        ticket_id=prompt.ticket_id,
+                        guild_id=prompt.guild_id,
+                        feedback_manager=self.feedback_manager,
+                    )
+                    view.message = await message.edit(view=view)
             except discord.errors.NotFound:
+                print("That message was not found.")
                 pass
+        print("Done!")
 
     @Cog.listener(name="on_ready")
     async def on_ready(self):
         await self.restore_ticket_panel()
         await self.restore_close_buttons()
+        await self.restore_feedback_prompt_view()
 
     async def _try_get_guild(
         self,

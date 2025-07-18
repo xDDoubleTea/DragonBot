@@ -60,7 +60,7 @@ class FeedbackManager:
                     "guild_id": guild_id,
                     "message_id": message_id,
                     "channel_id": channel_id,
-                    "message_type": message_type,
+                    "message_type": message_type.db_id,
                 },
                 returning_col="user_id",
             )
@@ -100,7 +100,7 @@ class FeedbackManager:
                 ticket_id=data["ticket_id"],
                 message_id=data["message_id"],
                 channel_id=data["channel_id"],
-                message_type=data["message_type"],
+                message_type=FeedbackPromptMessageType.from_id(data["message_type"]),
             )
             for data in raw_data
         ]

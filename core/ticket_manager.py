@@ -672,6 +672,7 @@ class TicketManager:
                             file=customer_transcript_file,
                             view=view,
                         )
+                        view.message = msg
                         await self.feedback_manager.insert_feedback_prompt(
                             user_id=customer.id,
                             ticket_id=ticket.db_id,
