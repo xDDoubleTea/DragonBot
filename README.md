@@ -93,6 +93,10 @@ This guide is for developers who wish to self-host the bot.
 - **ORM:** SQLAlchemy
 - **Documentation:** MkDocs
 
+## Documentation
+
+The project's documentation is built with MkDocs, which is also hosted using github pages [Documentation](https://xddoubletea.github.io/DragonBot/).
+
 ## Contributing
 
 Fork the repository, create a new branch, and submit a pull request. Contributions are welcome!  

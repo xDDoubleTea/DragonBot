@@ -2,7 +2,7 @@ import discord
 from discord import Interaction, TextChannel
 from discord.ui import Modal, View, button, Button, TextInput
 
-from config.models import CloseMessageType, TicketType
+from config.models import CloseMessageType, TicketStatus, TicketType
 from core.ticket_manager import TicketManager
 from config.constants import DS01, DISCORD_EMOJI
 from core.exceptions import ChannelCreationFail
@@ -59,7 +59,7 @@ class QuestionModal(Modal):
     async def on_submit(self, interaction: Interaction) -> None:
         # Defer ephemerally. This shows a private "thinking" message
         # while we create the channel, preventing timeouts.
-        await interaction.response.defer(ephemeral=True, thinking=True)
+        await interaction.response.send_message(ephemeral=True, content="處理中...")
 
         try:
             assert interaction.guild is not None
@@ -89,12 +89,12 @@ class QuestionModal(Modal):
                 add_std_footer(embed=embed, client=interaction.client)
                 embed.add_field(
                     name="商品名稱",
-                    value=f"`{self.item_purchase_input.value}`",
+                    value=f"{self.item_purchase_input.value}",
                     inline=False,
                 )
                 embed.add_field(
                     name="購買連結與方法",
-                    value=f"`{self.description_input.value}`",
+                    value=f"{self.description_input.value}",
                     inline=False,
                 )
                 await new_channel.send(embed=embed)
@@ -111,8 +111,8 @@ class QuestionModal(Modal):
                 )
 
             # 3. Send a final, persistent confirmation to the user.
-            await interaction.followup.send(
-                f"已將問題描述傳送至客服頻道：{new_channel.mention}"
+            await interaction.edit_original_response(
+                content=f"已將問題描述傳送至客服頻道：{new_channel.mention}"
             )
 
         except Exception as e:
@@ -190,18 +190,21 @@ class TicketCloseToggleView(View):
             and isinstance(interaction.channel, TextChannel)
         )
         await interaction.message.edit(view=None)
-        msg = interaction.message
-        if msg.components is not None:
-            await msg.edit(view=None)
-
-        await interaction.response.send_message(
+        resp = await interaction.response.send_message(
             content="你確定你想要關閉此頻道?",
             view=TicketCloseView(ticket_manager=self.ticket_manager),
         )
-        msg = await interaction.original_response()
+        assert resp.message_id
+        ticket = await self.ticket_manager.get_ticket(channel_id=interaction.channel_id)
+        assert ticket
+        # This button can only be inside a ticket channel
+        if ticket.status in {TicketStatus.OPEN, TicketStatus.IN_PROGRESS}:
+            await self.ticket_manager.set_ticket_status(
+                ticket=ticket, new_status=TicketStatus.RESOLVED
+            )
         await self.ticket_manager.set_close_msg_id(
             channel_id=interaction.channel.id,
-            close_msg_id=msg.id,
+            close_msg_id=resp.message_id,
             close_msg_type=CloseMessageType.CLOSE,
         )
 
@@ -213,24 +216,26 @@ class TicketCloseView(View):
 
     @button(label="關閉頻道", style=discord.ButtonStyle.red)
     async def close_callback(self, interaction: Interaction, button: Button):
-        assert (
-            interaction.message
-            and interaction.channel
-            and isinstance(interaction.channel, TextChannel)
-        )
-        await interaction.response.defer(thinking=True)
-        await interaction.message.edit(view=None)
-        # Actually close the channel
         try:
+            assert (
+                interaction.message
+                and interaction.channel
+                and isinstance(interaction.channel, TextChannel)
+            )
+            await interaction.response.send_message(
+                content="正在生成頻道紀錄以及傳送回饋單給顧客..."
+            )
+            await interaction.message.edit(view=None)
+            # Actually close the channel
             await self.ticket_manager.close_ticket(
                 channel=interaction.channel, client=interaction.client
             )
             view = TicketAfterClose(ticket_manager=self.ticket_manager)
-            await interaction.followup.send(
+            # This saves an api call, which is perfect.
+            msg = await interaction.edit_original_response(
                 content=f"頻道已被{interaction.user.mention}關閉。接下來你想要？",
                 view=view,
             )
-            msg = await interaction.original_response()
             await self.ticket_manager.set_close_msg_id(
                 channel_id=interaction.channel.id,
                 close_msg_id=msg.id,
@@ -238,9 +243,12 @@ class TicketCloseView(View):
             )
         except Exception as e:
             print("Error: ", e)
-            await interaction.followup.send(
-                "關閉頻道時發生錯誤，請稍後再試。", ephemeral=True
-            )
+            try:
+                await interaction.edit_original_response(
+                    content="關閉頻道時發生錯誤，請稍後再試。"
+                )
+            except (discord.errors.NotFound, discord.errors.Forbidden):
+                pass
 
     @button(label="取消", style=discord.ButtonStyle.gray)
     async def cancel_callback(self, interaction: Interaction, button: Button):
@@ -253,6 +261,12 @@ class TicketCloseView(View):
         await interaction.response.send_message(
             content="關閉頻道已取消。", ephemeral=True
         )
+        ticket = await self.ticket_manager.get_ticket(channel_id=interaction.channel_id)
+        assert ticket
+        if ticket.status == TicketStatus.RESOLVED:
+            await self.ticket_manager.set_ticket_status(
+                ticket=ticket, new_status=TicketStatus.IN_PROGRESS
+            )
         await self.ticket_manager.set_close_msg_id(
             channel_id=interaction.channel.id,
             close_msg_id=interaction.message.id,

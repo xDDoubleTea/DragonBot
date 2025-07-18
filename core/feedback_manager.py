@@ -224,26 +224,21 @@ class FeedbackManager:
             GROUP BY
                 customer_id
             ORDER BY
-                feedback_count DESC, average_rating DESC
+                average_rating DESC, feedback_count DESC
             LIMIT $2;
             """
         if not self.database_manager._pool:
             raise DBNotInit
         async with self.database_manager._pool.acquire() as conn:
-            rows: List[asyncpg.Record] | asyncpg.Record = await conn.fetchrow(
-                sql_query, guild_id, limit
+            assert isinstance(conn, asyncpg.connection.Connection)
+            rows: List[asyncpg.Record] = await conn.fetch(
+                sql_query,
+                guild_id,
+                limit,
             )
         if not rows:
             return None
-        if type(rows) is not list:
-            assert isinstance(rows, asyncpg.Record)
-            return [
-                FeedbackLeaderboardEntry(
-                    customer_id=rows["customer_id"],
-                    feedback_count=rows["feedback_count"],
-                    average_rating=rows["average_rating"],
-                )
-            ]
+
         return [
             FeedbackLeaderboardEntry(
                 customer_id=row["customer_id"],
