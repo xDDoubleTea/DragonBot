@@ -168,6 +168,7 @@ class TicketsCog(Cog):
                 if prompt.message_type == FeedbackPromptMessageType.RATING:
                     await message.edit(
                         view=FeedBackSystem(
+                            user_id=prompt.user_id,
                             ticket_id=prompt.ticket_id,
                             guild_id=prompt.guild_id,
                             feedback_manager=self.feedback_manager,
@@ -176,6 +177,7 @@ class TicketsCog(Cog):
                 elif prompt.message_type == FeedbackPromptMessageType.SELECT:
                     await message.edit(
                         view=words_selction(
+                            user_id=prompt.user_id,
                             ticket_id=prompt.ticket_id,
                             guild_id=prompt.guild_id,
                             feedback_manager=self.feedback_manager,

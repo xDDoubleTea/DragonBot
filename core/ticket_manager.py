@@ -10,6 +10,7 @@ from discord.ui import View
 import yaml
 from config.models import (
     CloseMessageType,
+    FeedbackPromptMessageType,
     Ticket,
     TicketStatus,
     TicketType,
@@ -650,25 +651,34 @@ class TicketManager:
 
             new = await archive_channel.send(embed=archive_embed, file=transcript_file)
 
-            view = FeedBackSystem(
-                ticket_id=ticket.db_id,
-                guild_id=ticket.guild_id,
-                feedback_manager=self.feedback_manager,
-            )
             feedback_embed = feedbackEmbed(channel=channel, client=client)
             assert feedback_embed.description
             feedback_embed.description += "\n說明：點選星數來代表今天服務的滿意度"
             for customer in customers:
                 if customer:
                     try:
+                        view = FeedBackSystem(
+                            user_id=customer.id,
+                            ticket_id=ticket.db_id,
+                            guild_id=ticket.guild_id,
+                            feedback_manager=self.feedback_manager,
+                        )
                         customer_transcript_file = discord.File(
                             io.BytesIO(transcript_bytes), filename=filename
                         )
-                        await customer.send(
+                        msg = await customer.send(
                             content="此為對話記錄檔案以及回饋按鈕：",
                             embeds=[archive_embed, feedback_embed],
                             file=customer_transcript_file,
                             view=view,
+                        )
+                        await self.feedback_manager.insert_feedback_prompt(
+                            user_id=customer.id,
+                            ticket_id=ticket.db_id,
+                            guild_id=ticket.guild_id,
+                            message_id=msg.id,
+                            channel_id=msg.channel.id,
+                            message_type=FeedbackPromptMessageType.RATING,
                         )
                     except discord.errors.Forbidden:
                         print(

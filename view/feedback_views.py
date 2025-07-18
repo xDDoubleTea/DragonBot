@@ -12,7 +12,7 @@ from discord import (
 )
 from discord.ui import TextInput, Modal, View, select, button, Button, Select
 from config.constants import feedback_channel_id
-from config.models import FeedbackEntry
+from config.models import FeedbackEntry, FeedbackPromptMessageType
 from core.feedback_manager import FeedbackManager
 from utils import embed_utils
 from utils.discord_utils import try_get_channel_by_bot
@@ -87,11 +87,16 @@ def feedbackEmbed(
 
 class FeedBackSystem(View):
     def __init__(
-        self, ticket_id: int, guild_id: int, feedback_manager: FeedbackManager
+        self,
+        user_id: int,
+        ticket_id: int,
+        guild_id: int,
+        feedback_manager: FeedbackManager,
     ):
         super().__init__(timeout=86400)
         self.ticket_id = ticket_id
         self.guild_id = guild_id
+        self.user_id = user_id
         self.feedback_manager = feedback_manager
         for i in range(1, 6):
             star_emoji = "⭐" * i
@@ -150,13 +155,21 @@ class FeedBackSystem(View):
             new_name = feed_back_channel.topic.split("⭐")[0] + new_name
         await feed_back_channel.edit(topic=new_name)
         await feed_back_channel.send(embed=embed)
-        await interaction.user.send(
+        msg = await interaction.user.send(
             "若您有興趣的話，請選擇想與今天服務人員說的話，或點擊按鈕輸入(擇1)。",
             view=words_selction(
+                user_id=self.user_id,
                 ticket_id=self.ticket_id,
                 guild_id=self.guild_id,
                 feedback_manager=self.feedback_manager,
             ),
+        )
+        await self.feedback_manager.update_feedback_prompt_msg_type(
+            user_id=interaction.user.id,
+            ticket_id=self.ticket_id,
+            guild_id=self.guild_id,
+            new_msg_id=msg.id,
+            new_msg_type=FeedbackPromptMessageType.SELECT,
         )
 
     async def on_timeout(self) -> None:
@@ -164,12 +177,20 @@ class FeedBackSystem(View):
             if isinstance(child, Button):
                 child.disabled = True
                 child.label = "已逾期..."
+        await self.feedback_manager.remove_user_feedback_prompt(
+            user_id=self.user_id, ticket_id=self.ticket_id, guild_id=self.guild_id
+        )
 
 
 class words_selction(View):
     def __init__(
-        self, ticket_id: int, guild_id: int, feedback_manager: FeedbackManager
+        self,
+        user_id: int,
+        ticket_id: int,
+        guild_id: int,
+        feedback_manager: FeedbackManager,
     ):
+        self.user_id = user_id
         self.ticket_id = ticket_id
         self.guild_id = guild_id
         self.feedback_manager = feedback_manager
@@ -229,4 +250,15 @@ class words_selction(View):
                 guild_id=self.guild_id,
                 feedback_manager=self.feedback_manager,
             )
+        )
+
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            if isinstance(child, Button):
+                child.disabled = True
+                child.label = "已逾期..."
+            elif isinstance(child, Select):
+                child.placeholder = "已逾期..."
+        await self.feedback_manager.remove_user_feedback_prompt(
+            user_id=self.user_id, ticket_id=self.ticket_id, guild_id=self.guild_id
         )

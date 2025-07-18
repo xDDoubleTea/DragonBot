@@ -12,7 +12,7 @@ from config.models import (
     FeedbackStats,
 )
 from utils.embed_utils import add_std_footer, create_themed_embed
-from utils.discord_utils import try_get_member, try_get_message, try_get_user
+from utils.discord_utils import try_get_member
 
 
 class NotEnoughFeedbacks(Exception):
@@ -66,6 +66,20 @@ class FeedbackManager:
             )
         except asyncpg.UniqueViolationError:
             pass
+
+    async def update_feedback_prompt_msg_type(
+        self,
+        user_id: int,
+        ticket_id: int,
+        guild_id: int,
+        new_msg_id: int,
+        new_msg_type: FeedbackPromptMessageType,
+    ):
+        await self.database_manager.update(
+            table_name=self.feedback_prompts_table_name,
+            data={"message_id": new_msg_id, "message_type": new_msg_type.db_id},
+            criteria={"user_id": user_id, "guild_id": guild_id, "ticket_id": ticket_id},
+        )
 
     async def remove_user_feedback_prompt(
         self, user_id: int, ticket_id: int, guild_id: int
