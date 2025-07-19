@@ -1,6 +1,8 @@
 site_name: DragonBot documentation
 theme:
   name: material
+  icon: 
+    repo: fontawesome/solid/trash
   palette: 
     # Palette toggle for dark mode
     - scheme: slate
@@ -12,7 +14,7 @@ theme:
       toggle:
         icon: material/brightness-7 
         name: Switch to dark mode
-
+repo_url: https://github.com/xDDoubleTea/DragonBot
 markdown_extensions:
   - pymdownx.superfences:
       custom_fences:
@@ -27,3 +29,5 @@ nav:
     - 'Keyword System': 'commands/keywords.md'
     - 'Role Requesting': 'commands/roles.md'
     - 'Miscellaneous': 'commands/miscellaneous.md'
+plugins:
+  - search

@@ -152,7 +152,7 @@ class TicketCreationView(View):
         await interaction.response.send_modal(modal)
 
     @button(
-        label="🛪自定義代購",
+        label="🛒自定義代購",
         style=discord.ButtonStyle.blurple,
         custom_id="自定義代購",
     )
