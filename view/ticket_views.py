@@ -11,7 +11,9 @@ from utils.embed_utils import add_std_footer, create_themed_embed
 
 class QuestionModal(Modal):
     def __init__(self, ticket_manager: TicketManager, ticket_type: TicketType):
-        super().__init__(title=f"問題表單，客服頻道種類：{ticket_type.value}")
+        super().__init__(
+            title=f"問題表單，客服頻道種類：{ticket_type.value if ticket_type != TicketType.CUSTOM_PURCHASE else '自定義代購'}"
+        )
         self.ticket_manager = ticket_manager
         self.ticket_type = ticket_type
 
@@ -35,14 +37,14 @@ class QuestionModal(Modal):
             self.item_purchase_input = TextInput(
                 label="想要代購的商品",
                 style=discord.TextStyle.short,
-                placeholder="遊戲點數",
+                placeholder="遊戲或商品名稱",
                 required=True,
             )
             self.add_item(self.item_purchase_input)
             self.description_input = TextInput(
                 label="商品連結以及購買方法",
                 style=discord.TextStyle.paragraph,
-                placeholder="連結：...",
+                placeholder="網站類請提供您要購買的商品連結、登入方式(如有)、價格(商品原本之價格)、商品原本之付款方式\n手遊、APP類 就是app名稱、登入方式、購買/付款方式(如跳轉google play付款)、價格",
                 required=True,
                 max_length=1024,
             )
@@ -128,7 +130,7 @@ class TicketCreationView(View):
     @button(
         label="代購問題",
         style=discord.ButtonStyle.blurple,
-        custom_id="代購",
+        custom_id=TicketType.PURCHASE.value,
         emoji=DS01,
     )
     async def pur_callback(self, interaction: Interaction, button: Button):
@@ -139,9 +141,21 @@ class TicketCreationView(View):
         await interaction.response.send_modal(modal)
 
     @button(
+        label="🛒自定義代購",
+        style=discord.ButtonStyle.blurple,
+        custom_id=TicketType.CUSTOM_PURCHASE.value,
+    )
+    async def custom_order_callback(self, interaction: Interaction, button: Button):
+        assert button.custom_id
+        modal = QuestionModal(
+            ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
+        )
+        await interaction.response.send_modal(modal)
+
+    @button(
         label="群組問題",
         style=discord.ButtonStyle.blurple,
-        custom_id="群組",
+        custom_id=TicketType.GUILD.value,
         emoji=DISCORD_EMOJI,
     )
     async def guild_callback(self, interaction: Interaction, button: Button):
@@ -152,21 +166,9 @@ class TicketCreationView(View):
         await interaction.response.send_modal(modal)
 
     @button(
-        label="🛒自定義代購",
-        style=discord.ButtonStyle.blurple,
-        custom_id="自定義代購",
-    )
-    async def custom_order_callback(self, interaction: Interaction, button: Button):
-        assert button.custom_id
-        modal = QuestionModal(
-            ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
-        )
-        await interaction.response.send_modal(modal)
-
-    @button(
         label="其他問題",
         style=discord.ButtonStyle.blurple,
-        custom_id="其他",
+        custom_id=TicketType.OTHERS.value,
         emoji="📩",
     )
     async def others_callback(self, interaction: Interaction, button: Button):

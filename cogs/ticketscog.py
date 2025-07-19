@@ -407,7 +407,7 @@ class TicketsCog(Cog):
     )
     @app_commands.checks.has_permissions(administrator=True)
     async def open_ticket(self, interaction: Interaction):
-        await interaction.response.defer(thinking=True, ephemeral=False)
+        await interaction.response.defer(thinking=True, ephemeral=True)
         if not interaction.guild:
             return await interaction.followup.send(
                 content="Please try again.", ephemeral=True
@@ -465,15 +465,19 @@ class TicketsCog(Cog):
         embed.url = "https://dragonshop.org/"
         embed.set_image(url="https://i.imgur.com/AgKFvBT.png")
         assert isinstance(cmd_channel, TextChannel)
-        await interaction.followup.send(
+        try:
+            await interaction.followup.send(content="Done")
+        except discord.errors.NotFound:
+            pass
+        except Exception as e:
+            print(e)
+        msg = await interaction.channel.send(
             content=ticket_system_main_message(
                 role=cus_service_role, cmd_channel=cmd_channel
             ),
             view=view,
             embed=embed,
-            ephemeral=False,
         )
-        msg = await interaction.original_response()
         await self.ticket_panel_manager.insert_or_update_panel(
             panel_message_data=PanelMessageData(
                 guild_id=interaction.guild.id,

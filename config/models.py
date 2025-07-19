@@ -128,7 +128,7 @@ class TicketType(StrEnum):
 
     PURCHASE = "代購"
     GUILD = "群組"
-    CUSTOM_PURCHASE = "自定義代購"
+    CUSTOM_PURCHASE = "自訂"
     OTHERS = "其他"
 
 
