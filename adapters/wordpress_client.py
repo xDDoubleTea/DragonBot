@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any
 
 import aiohttp
 
-from models.ticket import OrderDetails
+from config.wordpressmodels import OrderDetails
 
 logger = logging.getLogger(__name__)
 
@@ -51,19 +51,19 @@ class WordPressClient:
             logger.error(f"處理 WordPress API 請求時發生未知錯誤: {e}", exc_info=True)
             return None
 
-    async def update_ticket_message(
-        self, ticket_id: int, sender: str, message: str
-    ) -> bool:
-        """更新客服單的對話內容。"""
-        payload = {"ticket_id": ticket_id, "sender": sender, "message": message}
-        result = await self._request("POST", "/ticket/update", json=payload)
-        return result is not None
-
-    async def close_ticket(self, ticket_id: int) -> bool:
-        """將 WordPress 上的客服單狀態更新為 'closed'。"""
-        payload = {"ticket_id": ticket_id}
-        result = await self._request("POST", "/ticket/close", json=payload)
-        return result is not None
+    # async def update_ticket_message(
+    #     self, ticket_id: int, sender: str, message: str
+    # ) -> bool:
+    #     """更新客服單的對話內容。"""
+    #     payload = {"ticket_id": ticket_id, "sender": sender, "message": message}
+    #     result = await self._request("POST", "/ticket/update", json=payload)
+    #     return result is not None
+    #
+    # async def close_ticket(self, ticket_id: int) -> bool:
+    #     """將 WordPress 上的客服單狀態更新為 'closed'。"""
+    #     payload = {"ticket_id": ticket_id}
+    #     result = await self._request("POST", "/ticket/close", json=payload)
+    #     return result is not None
 
     async def get_order_details(self, ticket_id: int) -> Optional[OrderDetails]:
         """根據 ticket_id 獲取訂單詳細資訊。"""
@@ -83,13 +83,13 @@ class WordPressClient:
     #     data = await self._request("GET", "/tickets/open")
     #     return data if data else []
 
-    async def get_ticket_details(self, ticket_id: int) -> Optional[Dict]:
-        """呼叫 /ticket/get 取得客服單的標題和對話紀錄。"""
-        params = {"ticket_id": ticket_id}
-        return await self._request("GET", "/ticket/get", params=params)
-
-    async def get_channel_name(self, ticket_id: int) -> Optional[str]:
-        """呼叫 /ticket/channel_name 取得原始頻道名稱。"""
-        params = {"ticket_id": ticket_id}
-        data = await self._request("GET", "/ticket/channel_name", params=params)
-        return data.get("channel_name") if data else None
+    # async def get_ticket_details(self, ticket_id: int) -> Optional[Dict]:
+    #     """呼叫 /ticket/get 取得客服單的標題和對話紀錄。"""
+    #     params = {"ticket_id": ticket_id}
+    #     return await self._request("GET", "/ticket/get", params=params)
+    #
+    # async def get_channel_name(self, ticket_id: int) -> Optional[str]:
+    #     """呼叫 /ticket/channel_name 取得原始頻道名稱。"""
+    #     params = {"ticket_id": ticket_id}
+    #     data = await self._request("GET", "/ticket/channel_name", params=params)
+    #     return data.get("channel_name") if data else None

@@ -25,14 +25,25 @@ __all__ = [
     "ticket_system_main_message",
     "app_mode",
     "db_url",
+    "LOG_LEVEL",
+    "DISCORD_LOG_WEBHOOK_URL",
     "admin_role_id",
     "epic_dragon_role_id",
     "rare_dragon_role_id",
     "exporter_bot_token",
 ]
+
+
+def get_env_variable(var_name: str, default=None) -> str:
+    value = os.getenv(var_name, default)
+    if value is None:
+        raise ValueError(f"環境變數 '{var_name}' 未設定，請檢查您的 .env 檔案。")
+    return value
+
+
 load_dotenv()
-app_mode = os.getenv("APP_MODE")
-exporter_bot_token = os.getenv("EXPORTER_BOT_TOKEN")
+app_mode = get_env_variable("APP_MODE", "test")
+exporter_bot_token = get_env_variable("EXPORTER_BOT_TOKEN", None)
 assert app_mode in ["test", "prod"], "APP_MODE must be either 'test' or 'prod'"
 app_mode = app_mode.lower()
 db_url = (
@@ -45,7 +56,10 @@ bot_token = (
     os.getenv("BOT_TOKEN_PROD") if app_mode == "prod" else os.getenv("BOT_TOKEN_TEST")
 )
 
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+DISCORD_LOG_WEBHOOK_URL = os.getenv("DISCORD_LOG_WEBHOOK_URL")
 
+DRAGONSHOP_API_SECRET_KEY = os.getenv("DRAGONSHOP_API_SECRET_KEY")
 eng_to_chinese = {
     "Monday": "一",
     "Tuesday": "二",
