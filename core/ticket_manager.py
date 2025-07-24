@@ -8,6 +8,7 @@ from discord.ext.commands import Bot
 from discord.ext.commands.errors import ChannelNotFound
 from discord.ui import View
 import yaml
+from adapters.wordpress_client import WordPressClient
 from config.models import (
     CloseMessageType,
     FeedbackPromptMessageType,
@@ -16,10 +17,12 @@ from config.models import (
     TicketType,
     PanelMessageData,
 )
+from config.wordpressmodels import OrderDetails
 from core.feedback_manager import FeedbackManager
 from db.database_manager import AsyncDatabaseManager
 from core.exceptions import ChannelCreationFail, ChannelNotTicket, TicketNotFound
 from config.constants import (
+    WORDPRESS_URL,
     cus_service_role_id,
     eng_to_chinese,
     THEME_COLOR,
@@ -35,7 +38,7 @@ from utils.discord_utils import (
     try_get_guild,
     try_get_member,
 )
-from utils.embed_utils import create_themed_embed
+from utils.embed_utils import add_std_footer, create_themed_embed
 import subprocess
 from datetime import datetime, timedelta
 
@@ -51,15 +54,69 @@ class TicketManager:
         bot: Bot | Client,
         database_manager: AsyncDatabaseManager,
         feedback_manager: FeedbackManager,
+        wordpress_client: WordPressClient,
     ):
         self.database_manager = database_manager
         self.bot = bot
         self.ticket_table_name = "tickets"
         self.feedback_manager = feedback_manager
+        self.wordpress_client = wordpress_client
         self.ticket_panels_table_name = "ticket_panels"
         self.ticket_participants_table_name = "ticket_participants"
         self.panel_messages: Dict[int, PanelMessageData] = dict()
         self.ticket_caches: Dict[int, Ticket] = dict()
+
+    async def get_order_details_embed(self, order_details: OrderDetails) -> Embed:
+        embed = create_themed_embed(
+            title="訂單資訊",
+            description=f"**顧客:** {order_details.customer_name}",
+        )
+        add_std_footer(embed=embed, client=self.bot)
+
+        order_link = (
+            f"{WORDPRESS_URL}/wp-admin/post.php?post={order_details.order_id}&action=edit"
+            if order_details.order_id != "N/A"
+            else "#"
+        )
+        embed.add_field(
+            name="📦 訂單編號",
+            value=f"[{order_details.order_id}]({order_link})",
+            inline=True,
+        )
+        embed.add_field(
+            name="📊 訂單狀態",
+            value=f"**{order_details.order_status}**",
+            inline=True,
+        )
+        total_str = (
+            f"{order_details.total} 元" if order_details.total != "N/A" else "N/A"
+        )
+        embed.add_field(name="💰 總金額", value=f"`{total_str}`", inline=True)
+
+        embed.add_field(
+            name="📧 電子郵件", value=f"||{order_details.email}||", inline=True
+        )
+        embed.add_field(
+            name="📞 聯絡電話", value=f"||{order_details.phone}||", inline=True
+        )
+        embed.add_field(
+            name="💳 付款方式", value=order_details.payment_method, inline=True
+        )
+
+        items_str = (
+            "• " + order_details.items.replace(", ", "\n• ")
+            if order_details.items
+            else "無購買項目"
+        )
+        embed.add_field(
+            name="🛒 購買項目", value=f"```\n{items_str}\n```", inline=False
+        )
+
+        customer_notes = (
+            order_details.customer_notes if order_details.customer_notes else "無"
+        )
+        embed.add_field(name="📝 顧客備註", value=f"> {customer_notes}", inline=False)
+        return embed
 
     async def _try_get_channel_by_bot(
         self, channel_id: int

@@ -1,8 +1,10 @@
+import re
 import discord
 from discord import Interaction, TextChannel
 from discord.ui import Modal, View, button, Button, TextInput
 
 from config.models import CloseMessageType, TicketStatus, TicketType
+from config.wordpressmodels import OrderDetails
 from core.ticket_manager import TicketManager
 from config.constants import DS01, DISCORD_EMOJI
 from core.exceptions import ChannelCreationFail
@@ -101,10 +103,22 @@ class QuestionModal(Modal):
                 )
                 await new_channel.send(embed=embed)
 
-            if self.ticket_type == TicketType.PURCHASE and self.order_id_input.value:
-                await new_channel.send(
-                    content=f"**訂單編號**：`{self.order_id_input.value}`"
+            if self.ticket_type == TicketType.PURCHASE and (
+                order_id_match := re.match(r"#?\d+", self.order_id_input.value)
+            ):
+                order_id = int(order_id_match.group().lstrip("#"))
+
+                order_details = (
+                    await self.ticket_manager.wordpress_client.get_order_details(
+                        order_id=order_id
+                    )
                 )
+
+                if order_details:
+                    embed = await self.ticket_manager.get_order_details_embed(
+                        order_details=order_details
+                    )
+                    await new_channel.send(embed=embed)
             elif (
                 self.ticket_type == TicketType.GUILD and self.guild_problem_input.value
             ):

@@ -65,9 +65,8 @@ class WordPressClient:
     #     result = await self._request("POST", "/ticket/close", json=payload)
     #     return result is not None
 
-    async def get_order_details(self, ticket_id: int) -> Optional[OrderDetails]:
-        """根據 ticket_id 獲取訂單詳細資訊。"""
-        params = {"ticket_id": ticket_id}
+    async def get_order_details(self, order_id: int) -> Optional[OrderDetails]:
+        params = {"order_id": order_id}
         data = await self._request("GET", "/order/details", params=params)
         if data:
             defined_fields = OrderDetails.__annotations__.keys()
@@ -75,7 +74,7 @@ class WordPressClient:
                 key: value for key, value in data.items() if key in defined_fields
             }
 
-            return OrderDetails(ticket_id=ticket_id, **filtered_data)
+            return OrderDetails(order_id=order_id, **filtered_data)
         return None
 
     # async def get_open_tickets(self) -> list[dict]:

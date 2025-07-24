@@ -26,6 +26,7 @@ __all__ = [
     "app_mode",
     "db_url",
     "LOG_LEVEL",
+    "WORDPRESS_URL",
     "DISCORD_LOG_WEBHOOK_URL",
     "admin_role_id",
     "epic_dragon_role_id",
@@ -58,6 +59,8 @@ bot_token = (
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 DISCORD_LOG_WEBHOOK_URL = os.getenv("DISCORD_LOG_WEBHOOK_URL")
+WORDPRESS_URL = get_env_variable("WORDPRESS_URL")
+WEBHOOK_SHARED_SECRET = get_env_variable("WEBHOOK_SHARED_SECRET")
 
 DRAGONSHOP_API_SECRET_KEY = os.getenv("DRAGONSHOP_API_SECRET_KEY")
 eng_to_chinese = {

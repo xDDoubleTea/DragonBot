@@ -11,7 +11,7 @@ from config import (
     db_url,
     MY_GUILD,
 )
-from config.constants import DRAGONSHOP_API_SECRET_KEY
+from config.constants import DRAGONSHOP_API_SECRET_KEY, WORDPRESS_URL
 from core.feedback_manager import FeedbackManager
 from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
@@ -20,6 +20,7 @@ from core.ticket_panel_manager import TicketPanelManager
 from db.database_manager import AsyncDatabaseManager, DatabaseManager
 import logging
 from utils.logger import setup_logging
+from adapters.wordpress_client import WordPressClient
 
 setup_logging()
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ class DragonBot(commands.Bot):
 
         self.db_manager = DatabaseManager(database_url=db_url)
         # Maybe we will need the Synchrounus database manager one day.
-
+        assert DRAGONSHOP_API_SECRET_KEY
         self.wordpress_client = WordPressClient(
             api_url=WORDPRESS_URL, api_key=DRAGONSHOP_API_SECRET_KEY
         )
@@ -51,6 +52,7 @@ class DragonBot(commands.Bot):
             bot=self,
             database_manager=self.async_db_manager,
             feedback_manager=self.feedback_manager,
+            wordpress_client=self.wordpress_client,
         )
         self.ticket_panel_manager = TicketPanelManager(
             bot=self, database_manager=self.async_db_manager

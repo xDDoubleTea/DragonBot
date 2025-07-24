@@ -5,8 +5,7 @@ from dataclasses import dataclass
 class OrderDetails:
     """Ticket Order Details from the Wordpress API."""
 
-    ticket_id: int
-    order_id: str = "N/A"
+    order_id: int
     order_status: str = "N/A"
     customer_name: str = "N/A"
     email: str = "N/A"
@@ -26,4 +25,3 @@ class NewTicketPayload:
     ticket_title: str
     sender: str
     ticket_message: str
-
