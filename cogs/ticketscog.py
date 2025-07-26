@@ -41,7 +41,7 @@ from core.feedback_manager import FeedbackManager
 from core.ticket_manager import TicketManager
 from core.ticket_panel_manager import TicketPanelManager
 from utils.embed_utils import create_themed_embed
-from view.feedback_views import FeedBackSystem, words_selction
+from view.feedback_views import FeedBackSystem, WordSelection
 from view.ticket_views import (
     TicketAfterClose,
     TicketCloseToggleView,
@@ -176,7 +176,7 @@ class TicketsCog(Cog):
                         f"Restoring drop down menu for {user.name} with ticket id {prompt.ticket_id}."
                     )
 
-                    view = words_selction(
+                    view = WordSelection(
                         user_id=prompt.user_id,
                         ticket_id=prompt.ticket_id,
                         guild_id=prompt.guild_id,
