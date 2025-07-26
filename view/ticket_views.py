@@ -165,18 +165,18 @@ class TicketCreationView(View):
         )
         await interaction.response.send_modal(modal)
 
-    @button(
-        label="其他問題",
-        style=discord.ButtonStyle.blurple,
-        custom_id=TicketType.OTHERS.value,
-        emoji="📩",
-    )
-    async def others_callback(self, interaction: Interaction, button: Button):
-        assert button.custom_id
-        modal = QuestionModal(
-            ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
-        )
-        await interaction.response.send_modal(modal)
+    # @button(
+    #     label="其他問題",
+    #     style=discord.ButtonStyle.blurple,
+    #     custom_id=TicketType.OTHERS.value,
+    #     emoji="📩",
+    # )
+    # async def others_callback(self, interaction: Interaction, button: Button):
+    #     assert button.custom_id
+    #     modal = QuestionModal(
+    #         ticket_manager=self.ticket_manager, ticket_type=TicketType(button.custom_id)
+    #     )
+    #     await interaction.response.send_modal(modal)
 
 
 class TicketCloseToggleView(View):
