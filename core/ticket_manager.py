@@ -602,7 +602,7 @@ class TicketManager:
             return await self.get_ticket_participants_id(ticket_id=ticket.db_id)
 
         participants_id = await _sync_update_and_select()
-        customers_mention = ""
+        customers_mention = customer_name = ""
         customers: List[Union[User, Member]] = []
         assert participants_id and isinstance(participants_id, set)
         cus_num = 0
@@ -611,6 +611,7 @@ class TicketManager:
             if member:
                 await channel.set_permissions(target=member, read_messages=False)
                 customers_mention += member.mention + ", "
+                customer_name += member.name + ", "
                 customers.append(member)
                 cus_num += 1
             else:
@@ -619,6 +620,7 @@ class TicketManager:
                 )
             # Generate the channel history archive
         customers_mention = customers_mention.rstrip(", ")
+        customer_name = customer_name.rstrip(", ")
         try:
             transcript_bytes: bytes
             transcript_bytes, filename = await self.archive_ticket(
@@ -645,7 +647,7 @@ class TicketManager:
 
             archive_embed = discord.Embed(
                 title=f"頻道 「{channel.name}」紀錄",
-                description=f"顧客：{customers_mention}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
+                description=f"顧客：{customers_mention}\n{customer_name}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
                 color=THEME_COLOR,
             )
 
