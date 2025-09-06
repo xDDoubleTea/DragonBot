@@ -593,11 +593,11 @@ class TicketsCog(Cog):
         assert isinstance(interaction.user, Member)
 
         choices = {
+            "麥當勞 大蛋捲冰淇淋電子券": 0.4,
             "50元購物金": 0.3,
             "100元購物金": 0.1,
-            "Discord Nitro Basic一個月": 0.3,
+            "Discord Nitro Basic一個月": 0.1,
             "Discord Nitro一個月": 0.09,
-            "麥當勞 大蛋捲冰淇淋電子券": 0.2,
             "龍龍代購網600元以內商品任選一個": 0.01,
         }
         temp = [(choice, choices[choice] * 100) for choice in choices]
