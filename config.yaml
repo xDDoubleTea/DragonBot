@@ -1,18 +1,18 @@
 business_hours:
   - day: Monday
-    start_time: "18:00"
+    start_time: "17:00"
     end_time: "00:00"
   - day: Tuesday
-    start_time: "18:00"
+    start_time: "14:00"
     end_time: "00:00"
   - day: Wednesday
-    start_time: "18:00"
+    start_time: "17:00"
     end_time: "00:00"
   - day: Thursday
-    start_time: "18:00"
+    start_time: "17:00"
     end_time: "00:00"
   - day: Friday
-    start_time: "18:00"
+    start_time: "17:00"
     end_time: "00:00"
   - day: Saturday
     start_time: "12:00"
