@@ -43,6 +43,7 @@ from core.ticket_panel_manager import TicketPanelManager
 from utils.embed_utils import create_themed_embed
 from view.feedback_views import FeedBackSystem, WordSelection
 from view.ticket_views import (
+    SetBusinessHoursModal,
     TicketAfterClose,
     TicketCloseToggleView,
     TicketCloseView,
@@ -671,6 +672,12 @@ class TicketsCog(Cog):
             await self.ticket_manager.set_ticket_status(
                 ticket=ticket, new_status=TicketStatus.RESOLVED
             )
+
+    @app_commands.command(name="set_business_hour", description="設置營業時間")
+    @app_commands.guild_only()
+    @app_commands.checks.has_permissions(administrator=True)
+    async def set_business_hour(self, interaction: Interaction):
+        await interaction.response.send_modal(SetBusinessHoursModal())
 
 
 async def setup(client):

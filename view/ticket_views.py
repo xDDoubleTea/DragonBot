@@ -1,12 +1,81 @@
 import discord
+from typing import List, Dict
 from discord import Interaction, TextChannel
 from discord.ui import Modal, View, button, Button, TextInput
-
+import re
+import yaml
 from config.models import CloseMessageType, TicketStatus, TicketType
 from core.ticket_manager import TicketManager
 from config.constants import DS01, DISCORD_EMOJI
 from core.exceptions import ChannelCreationFail
 from utils.embed_utils import add_std_footer, create_themed_embed
+
+
+class ParseError(Exception):
+    pass
+
+
+class SetBusinessHoursModal(Modal):
+    def __init__(self):
+        super().__init__(title="設定營業時間")
+        self.business_hour = TextInput(
+            label="設置營業時間",
+            style=discord.TextStyle.long,
+            placeholder="格式：開始時間(時:分),結束時間(時:分)，用半形冒號!程式會忽略空格\n第幾行就是星期幾\n範例：\n12:00,24:00\n...",
+            required=True,
+        )
+        self.add_item(self.business_hour)
+
+    def parse_input(self, input_val: str) -> List[Dict[str, str]]:
+        temp = input_val.splitlines()
+        if len(temp) != 7:
+            raise ParseError
+        try:
+            temp = [val.split(",") for val in temp]
+            day = [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ]
+            st = ["start_time", "end_time"]
+            out = []
+            for i, val in enumerate(temp):
+                cur_dict = {"day": day[i]}
+                for j, s in enumerate(val):
+                    get_match = re.findall(r" *(\d\d) *(:) *(\d\d) *", s)
+                    # returns a list
+                    if not get_match or len(get_match) > 1:
+                        raise ParseError
+
+                    cur_dict[st[j]] = "".join(get_match[0])
+                out.append(cur_dict)
+            return out
+
+        except (IndexError, TypeError):
+            raise ParseError
+
+    async def on_submit(self, interaction: Interaction) -> None:
+        try:
+            result = self.parse_input(self.business_hour.value)
+            with open("config.yaml", "w") as file:
+                yaml.safe_dump(result, file)
+            await interaction.response.send_message(
+                "成功設置營業時間！", ephemeral=True
+            )
+        except ParseError:
+            await interaction.response.send_message(
+                "輸入資料有誤，請檢查格式\n你的輸入是：\n" + self.business_hour.value,
+                ephemeral=True,
+            )
+        except Exception as e:
+            print(f"Error, {e}")
+            await interaction.response.send_message(
+                "發生未知錯誤，請通知開發者", ephemeral=True
+            )
 
 
 class QuestionModal(Modal):

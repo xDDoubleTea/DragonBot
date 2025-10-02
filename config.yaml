@@ -20,6 +20,3 @@ business_hours:
   - day: Sunday
     start_time: "12:00"
     end_time: "00:00"
-
-# You could add other configurations here later
-bot_prefix: ">"
