@@ -21,9 +21,10 @@ class SetBusinessHoursModal(Modal):
         self.business_hour = TextInput(
             label="設置營業時間",
             style=discord.TextStyle.long,
-            placeholder="格式：開始時間,結束時間\n第幾行就是星期幾\n範例：\n12:00,24:00\n12:00,24:00\n12:00,24:00\n12:00,24:00\n12:00,24:00\n12:00,24:00\n12:00,24:00\n",
+            placeholder="格式：開始時間(時:分),結束時間(時:分)，用半形冒號!程式會忽略空格\n第幾行就是星期幾\n範例：\n12:00,24:00\n...",
             required=True,
         )
+        self.add_item(self.business_hour)
 
     def parse_input(self, input_val: str) -> List[Dict[str, str]]:
         temp = input_val.splitlines()
@@ -31,7 +32,15 @@ class SetBusinessHoursModal(Modal):
             raise ParseError
         try:
             temp = [val.split(",") for val in temp]
-            day = ["一", "二", "三", "四", "五", "六", "日"]
+            day = [
+                "Monday",
+                "Tuesday",
+                "Wednesday",
+                "Thursday",
+                "Friday",
+                "Saturday",
+                "Sunday",
+            ]
             st = ["start_time", "end_time"]
             out = []
             for i, val in enumerate(temp):
@@ -39,22 +48,28 @@ class SetBusinessHoursModal(Modal):
                 for j, s in enumerate(val):
                     get_match = re.findall(r" *(\d\d) *(:) *(\d\d) *", s)
                     # returns a list
-                    if not get_match:
+                    if not get_match or len(get_match) > 1:
                         raise ParseError
-                    cur_dict[st[j]] = "".join(get_match)
+
+                    cur_dict[st[j]] = "".join(get_match[0])
+                out.append(cur_dict)
             return out
 
-        except IndexError:
+        except (IndexError, TypeError):
             raise ParseError
 
     async def on_submit(self, interaction: Interaction) -> None:
         try:
             result = self.parse_input(self.business_hour.value)
-            with open("config.yaml", "rw") as file:
+            with open("config.yaml", "w") as file:
                 yaml.safe_dump(result, file)
+            await interaction.response.send_message(
+                "成功設置營業時間！", ephemeral=True
+            )
         except ParseError:
             await interaction.response.send_message(
-                "輸入資料有誤，請檢查格式", ephemeral=True
+                "輸入資料有誤，請檢查格式\n你的輸入是：\n" + self.business_hour.value,
+                ephemeral=True,
             )
         except Exception as e:
             print(f"Error, {e}")

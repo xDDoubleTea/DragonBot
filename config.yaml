@@ -1,25 +1,21 @@
-business_hours:
-  - day: Monday
-    start_time: "13:00"
-    end_time: "00:00"
-  - day: Tuesday
-    start_time: "13:00"
-    end_time: "00:00"
-  - day: Wednesday
-    start_time: "13:00"
-    end_time: "00:00"
-  - day: Thursday
-    start_time: "13:00"
-    end_time: "00:00"
-  - day: Friday
-    start_time: "13:00"
-    end_time: "00:00"
-  - day: Saturday
-    start_time: "13:00"
-    end_time: "00:00"
-  - day: Sunday
-    start_time: "13:00"
-    end_time: "00:00"
-
-# You could add other configurations here later
-bot_prefix: ">"
+- day: Monday
+  end_time: '22:00'
+  start_time: '11:00'
+- day: Tuesday
+  end_time: '22:00'
+  start_time: '11:00'
+- day: Wednesday
+  end_time: '22:00'
+  start_time: '11:00'
+- day: Thursday
+  end_time: '22:00'
+  start_time: '11:00'
+- day: Friday
+  end_time: '22:00'
+  start_time: '11:00'
+- day: Saturday
+  end_time: '22:00'
+  start_time: '11:00'
+- day: Sunday
+  end_time: '22:00'
+  start_time: '11:00'
