@@ -15,6 +15,8 @@ Dragon Bot is a multi-purpose Discord bot designed with a primary focus on provi
 
 This project reflects my journey in software design, moving from a monolithic script to a structured, maintainable application.
 
+> I am a solo dev, so please be patient with the development progress.
+
 ## Key Features
 
 - 🎟️ **Ticket System:** A comprehensive ticket management system allowing users to create, manage, and close support tickets through dedicated channels.
@@ -99,5 +101,5 @@ The project's documentation is built with MkDocs, which is also hosted using git
 
 ## Contributing
 
-Fork the repository, create a new branch, and submit a pull request. Contributions are welcome!  
-Recommend to read the [contribution guide](CONTRIBUTING.md) for more details. You can also first open an issue to discuss your changes.  
+For now, I am not accepting contributions, as this bot is not intended to be used outside of my own server.  
+There will be another repository for the public version of the bot, which will be open for contributions, though I am not sure when I will create it.  

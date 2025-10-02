@@ -41,7 +41,7 @@ from core.feedback_manager import FeedbackManager
 from core.ticket_manager import TicketManager
 from core.ticket_panel_manager import TicketPanelManager
 from utils.embed_utils import create_themed_embed
-from view.feedback_views import FeedBackSystem, words_selction
+from view.feedback_views import FeedBackSystem, WordSelection
 from view.ticket_views import (
     SetBusinessHoursModal,
     TicketAfterClose,
@@ -177,7 +177,7 @@ class TicketsCog(Cog):
                         f"Restoring drop down menu for {user.name} with ticket id {prompt.ticket_id}."
                     )
 
-                    view = words_selction(
+                    view = WordSelection(
                         user_id=prompt.user_id,
                         ticket_id=prompt.ticket_id,
                         guild_id=prompt.guild_id,
@@ -594,11 +594,11 @@ class TicketsCog(Cog):
         assert isinstance(interaction.user, Member)
 
         choices = {
+            "麥當勞 大蛋捲冰淇淋電子券": 0.4,
             "50元購物金": 0.3,
             "100元購物金": 0.1,
-            "Discord Nitro Basic一個月": 0.3,
+            "Discord Nitro Basic一個月": 0.1,
             "Discord Nitro一個月": 0.09,
-            "麥當勞 大蛋捲冰淇淋電子券": 0.2,
             "龍龍代購網600元以內商品任選一個": 0.01,
         }
         temp = [(choice, choices[choice] * 100) for choice in choices]

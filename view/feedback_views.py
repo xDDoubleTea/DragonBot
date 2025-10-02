@@ -65,8 +65,12 @@ class FeedbackModal(Modal):
         embed_utils.add_std_footer(embed=embed, client=interaction.client)
         assert isinstance(channel, TextChannel)
         await channel.send(embed=embed)
-        msg = await interaction.message.reply(f"評語`{output}`已傳送!感謝您的惠顧!")
-        return await msg.add_reaction("✅")
+        await self.feedback_manager.remove_user_feedback_prompt(
+            user_id=interaction.user.id,
+            ticket_id=self.ticket_id,
+            guild_id=self.guild_id,
+        )
+        await interaction.message.reply(f"評語`{output}`已傳送!感謝您的惠顧!")
 
     async def on_timeout(self) -> None:
         return await super().on_timeout()
@@ -157,7 +161,7 @@ class FeedBackSystem(View):
             new_name = feed_back_channel.topic.split("⭐")[0] + new_name
         await feed_back_channel.edit(topic=new_name)
         await feed_back_channel.send(embed=embed)
-        view = words_selction(
+        view = WordSelection(
             user_id=self.user_id,
             ticket_id=self.ticket_id,
             guild_id=self.guild_id,
@@ -189,7 +193,7 @@ class FeedBackSystem(View):
         )
 
 
-class words_selction(View):
+class WordSelection(View):
     def __init__(
         self,
         user_id: int,
@@ -245,8 +249,9 @@ class words_selction(View):
         assert isinstance(feedback_channel, TextChannel)
         await feedback_channel.send(embed=embed)
         await interaction.response.send_message(f"評語{output}已傳送!感謝您的惠顧!")
-        msg = await interaction.original_response()
-        return await msg.add_reaction("✅")
+        await self.feedback_manager.remove_user_feedback_prompt(
+            user_id=self.user_id, ticket_id=self.ticket_id, guild_id=self.guild_id
+        )
 
     @button(label="輸入評語", style=ButtonStyle.blurple, emoji="⌨")
     async def btn_callback(self, interaction: Interaction, button: Button):
