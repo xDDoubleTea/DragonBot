@@ -1,3 +1,4 @@
+import asyncio
 import os
 import discord
 from discord.ext import commands
@@ -81,11 +82,21 @@ class DragonBot(commands.Bot):
         await super().close()
 
 
-def main():
-    client = DragonBot()
+async def close_client(client: commands.Bot):
+    await client.close()
+
+
+client = DragonBot()
+
+
+async def main():
     assert bot_token is not None
-    client.run(bot_token)
+    try:
+        await client.start(bot_token)
+    except KeyboardInterrupt:
+        await client.close()
+        exit(0)
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
