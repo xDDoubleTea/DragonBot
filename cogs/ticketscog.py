@@ -433,19 +433,9 @@ class TicketsCog(Cog):
                 channel_id=None,
                 message_id=None,
             ):
-                print(panel)
-                panel_cnl = await try_get_channel(
-                    guild=interaction.guild, channel_id=panel.channel_id
-                )
-                assert isinstance(panel_cnl, TextChannel)
-                panel_msg = await try_get_message(
-                    channel=panel_cnl, message_id=panel.message_id
-                )
-                assert isinstance(panel_msg, Message) or isinstance(
-                    panel_msg, PartialMessage
-                )
+                message_url = f"https://discord.com/channels/{interaction.guild.id}/{panel.channel_id}/{panel.message_id}"
                 return await interaction.followup.send(
-                    content=f"There should only exist one open message for each guild. The url of the open message in your guild is {panel_msg.jump_url}",
+                    content=f"There should only exist one open message for each guild. The url of the open message in your guild is {message_url}",
                     ephemeral=True,
                 )
         except AssertionError:
