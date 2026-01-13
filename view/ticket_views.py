@@ -188,7 +188,7 @@ class QuestionModal(Modal):
 
         except Exception as e:
             print(f"Error during modal ticket creation: {e}")
-            await interaction.followup.send("❌ 建立頻道時發生錯誤，請稍後再試一次！")
+            await interaction.followup.send("❌ 建立頻道時發生錯誤，請稍後再試一次！", ephemeral=True)
 
 
 class TicketCreationView(View):
