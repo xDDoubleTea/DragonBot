@@ -4,7 +4,7 @@ from discord import Embed, Client
 import time
 from datetime import date
 
-from config.constants import THEME_COLOR, My_user_id, default_footer
+from config.constants import THEME_COLOR, MY_USER_ID, DEFAULT_FOOTER
 
 
 def create_themed_embed(
@@ -19,7 +19,7 @@ def create_themed_embed(
 def add_std_footer(embed: Embed, client: Client):
     if not client.user:
         return
-    dev = client.get_user(My_user_id)
+    dev = client.get_user(MY_USER_ID)
     assert dev is not None and dev.avatar is not None and client.user.avatar is not None
 
     t = time.localtime()
@@ -30,6 +30,6 @@ def add_std_footer(embed: Embed, client: Client):
         name=f"{client.user.display_name}", icon_url=client.user.avatar.url
     )
     embed.set_footer(
-        text=f"{default_footer} \n Sent at {today_date} , {current_time}",
+        text=f"{DEFAULT_FOOTER} \n Sent at {today_date} , {current_time}",
         icon_url=dev.avatar.url,
     )

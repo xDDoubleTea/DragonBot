@@ -6,8 +6,8 @@ from config import (
     pre,
     app_id,
     bot_token,
-    My_user_id,
-    version,
+    MY_USER_ID,
+    VERSION,
     app_mode,
     db_url,
     MY_GUILD,
@@ -27,7 +27,7 @@ class DragonBot(commands.Bot):
             command_prefix=pre,
             intents=discord.Intents.all(),
             help_command=None,
-            description=f"Dragon Bot version {version}\n Mode {app_mode}",
+            description=f"Dragon Bot version {VERSION}\n Mode {app_mode}",
             application_id=app_id,
         )
         assert db_url is not None
@@ -57,7 +57,7 @@ class DragonBot(commands.Bot):
     async def on_ready(self):
         print(f"{self.user} is now online!")
         await self.change_presence(
-            activity=discord.Game(f"Developed by {self.get_user(My_user_id)}")
+            activity=discord.Game(f"Developed by {self.get_user(MY_USER_ID)}")
         )
         self.tree.copy_global_to(guild=MY_GUILD)
         await self.tree.sync(guild=MY_GUILD)

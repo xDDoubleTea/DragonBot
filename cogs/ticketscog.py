@@ -19,7 +19,7 @@ from discord.ext.commands.hybrid import app_commands
 from discord.message import PartialMessage
 from config.canned_response import ReplyKeys
 from config.constants import (
-    My_user_id,
+    MY_USER_ID,
     ticket_system_main_message,
     cus_service_role_id,
     cmd_channel_id,
@@ -212,7 +212,7 @@ class TicketsCog(Cog):
                 cus_service_role_id in message.raw_role_mentions
                 or app_id in message.raw_mentions
                 or ericdragon_user_id in message.raw_mentions
-                or My_user_id in message.raw_mentions
+                or MY_USER_ID in message.raw_mentions
                 or admin_role_id in message.raw_role_mentions
                 or epic_dragon_role_id in message.raw_role_mentions
                 or rare_dragon_role_id in message.raw_role_mentions
