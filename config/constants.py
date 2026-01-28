@@ -6,11 +6,11 @@ __all__ = [
     "bot_token",
     "pre",
     "eng_to_chinese",
-    "currency_information_url",
-    "My_user_id",
-    "version",
-    "MyDiscordID",
-    "default_footer",
+    "CURRENCY_INFO_URL",
+    "MY_USER_ID",
+    "VERSION",
+    "MY_DISCORD_ID",
+    "DEFAULT_FOOTER",
     "cmd_channel_id",
     "cus_service_role_id",
     "THEME_COLOR",
@@ -57,10 +57,10 @@ eng_to_chinese = {
 }
 
 
-My_user_id = 398444155132575756
-version = 4.0
-MyDiscordID = "hoshiyomi6942"
-default_footer = f"Developed by {MyDiscordID} version:{version}"
+MY_USER_ID = 398444155132575756
+VERSION = 4.0
+MY_DISCORD_ID = "hoshiyomi6942"
+DEFAULT_FOOTER = f"Developed by {MY_DISCORD_ID} version:{VERSION}"
 
 
 cmd_channel_id = 461556173011943435 if app_mode == "prod" else 1073168107813740556
@@ -99,14 +99,14 @@ MY_GUILD = (
 # guild dragon 403844884374487040
 # test guild 1039906085626196079
 
-currency_information_url = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
+CURRENCY_INFO_URL = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
 
 DS01 = "<:ds01:894967438733606943>"
 DISCORD_EMOJI = "<:discord:934326257699663872>"
 
 
 def ticket_system_main_message(role: Role, cmd_channel: TextChannel):
-    xd = f"""
+    return f"""
 # ⭐ 客服開單系統 ⭐ 
 > **請務必詳閱以下內容後，再開啟客服單為您服務**
 ## 1. 開單前請確認需求  
@@ -131,4 +131,3 @@ def ticket_system_main_message(role: Role, cmd_channel: TextChannel):
 【平日】下午6點
 【假日】中午12點-起至凌晨12點```
 """
-    return xd
