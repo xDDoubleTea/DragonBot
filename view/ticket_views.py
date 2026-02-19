@@ -60,7 +60,7 @@ class SetBusinessHoursModal(Modal):
 
     async def on_submit(self, interaction: Interaction) -> None:
         try:
-            result = {"business_hour": self.parse_input(self.business_hour.value)}
+            result = {"business_hours": self.parse_input(self.business_hour.value)}
             with open("config.yaml", "w") as file:
                 yaml.safe_dump(result, file)
             await interaction.response.send_message(
