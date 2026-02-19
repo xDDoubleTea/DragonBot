@@ -60,7 +60,7 @@ class SetBusinessHoursModal(Modal):
 
     async def on_submit(self, interaction: Interaction) -> None:
         try:
-            result = self.parse_input(self.business_hour.value)
+            result = {"business_hour": self.parse_input(self.business_hour.value)}
             with open("config.yaml", "w") as file:
                 yaml.safe_dump(result, file)
             await interaction.response.send_message(
@@ -188,7 +188,9 @@ class QuestionModal(Modal):
 
         except Exception as e:
             print(f"Error during modal ticket creation: {e}")
-            await interaction.followup.send("❌ 建立頻道時發生錯誤，請稍後再試一次！", ephemeral=True)
+            await interaction.followup.send(
+                "❌ 建立頻道時發生錯誤，請稍後再試一次！", ephemeral=True
+            )
 
 
 class TicketCreationView(View):
