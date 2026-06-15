@@ -30,10 +30,24 @@ __all__ = [
     "rare_dragon_role_id",
     "exporter_bot_token",
 ]
+
+
 load_dotenv()
+
+
+def get_required_env(key: str) -> str:
+    val = os.getenv(key)
+    if not val:
+        exit(f"{key} is not configured!")
+    return val
+
+
 app_mode = os.getenv("APP_MODE")
-exporter_bot_token = os.getenv("EXPORTER_BOT_TOKEN")
+
+exporter_bot_token = get_required_env("EXPORTER_BOT_TOKEN")
+
 assert app_mode in ["test", "prod"], "APP_MODE must be either 'test' or 'prod'"
+
 app_mode = app_mode.lower()
 db_url = (
     os.getenv("DATABASE_PROD_URL")
@@ -42,7 +56,9 @@ db_url = (
 )
 pre = os.getenv("PREFIX_PROD") if app_mode == "prod" else os.getenv("PREFIX_TEST")
 bot_token = (
-    os.getenv("BOT_TOKEN_PROD") if app_mode == "prod" else os.getenv("BOT_TOKEN_TEST")
+    get_required_env("BOT_TOKEN_PROD")
+    if app_mode == "prod"
+    else get_required_env("BOT_TOKEN_TEST")
 )
 
 

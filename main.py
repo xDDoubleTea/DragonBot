@@ -1,5 +1,6 @@
 import asyncio
 import os
+import logging
 import discord
 from discord.ext import commands
 from config import (
@@ -18,19 +19,22 @@ from core.ticket_manager import TicketManager
 from core.keyword_manager import KeywordManager
 from core.ticket_panel_manager import TicketPanelManager
 from db.database_manager import AsyncDatabaseManager, DatabaseManager
+import signal
+from config.logger import setup_logger
 
 
 class DragonBot(commands.Bot):
-    def __init__(self):
+    def __init__(self, intents: discord.Intents, logger: logging.Logger):
         assert pre is not None, "Prefix must be defined in the config"
         super().__init__(
             command_prefix=pre,
-            intents=discord.Intents.all(),
+            intents=intents,
             help_command=None,
             description=f"Dragon Bot version {VERSION}\n Mode {app_mode}",
             application_id=app_id,
         )
         assert db_url is not None
+        self.logger = logger
 
         self.db_manager = DatabaseManager(database_url=db_url)
         # Maybe we will need the Synchrounus database manager one day.
@@ -86,16 +90,40 @@ async def close_client(client: commands.Bot):
     await client.close()
 
 
-client = DragonBot()
-
-
 async def main():
-    assert bot_token is not None
+    async def shutdown(sig: signal.Signals, loop: asyncio.AbstractEventLoop):
+        if sig:
+            bot.logger.info(f"Received exit signal {sig.name}...")
+
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
+            bot.logger.info(f"Cancelling task {task.get_name()}...")
+
+        await bot.close()
+        bot.logger.info("Shutdown complete.")
+        loop.stop()
+
+    loop = asyncio.get_event_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(
+            sig, lambda s=sig: asyncio.create_task(shutdown(s, loop))
+        )
+
+    setup_logger(log_level=logging.DEBUG)
+
+    intents = discord.Intents.all()
+    bot = DragonBot(intents=intents, logger=logging.getLogger("DragonBot"))
+
     try:
-        await client.start(bot_token)
-    except KeyboardInterrupt:
-        await client.close()
-        exit(0)
+        await bot.start(token=bot_token)
+    except asyncio.CancelledError:
+        bot.logger.info("Bot shutdown initiated...")
+    except Exception as e:
+        bot.logger.exception("An unhandled error occurred:", exc_info=e)
+    finally:
+        if not bot.is_closed():
+            await bot.close()
+            bot.logger.info("Bot closed.")
 
 
 if __name__ == "__main__":

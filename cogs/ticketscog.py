@@ -42,6 +42,7 @@ from core.ticket_manager import TicketManager
 from core.ticket_panel_manager import TicketPanelManager
 from utils.embed_utils import create_themed_embed
 from view.feedback_views import FeedBackSystem, WordSelection
+from view.giveaway_settings import GiveawaySettings
 from view.ticket_views import (
     SetBusinessHoursModal,
     TicketAfterClose,
@@ -566,58 +567,6 @@ class TicketsCog(Cog):
                 content="此客服頻道已經沒有客戶了，你在幹麻？？？", ephemeral=True
             )
 
-    @ticket_operations.command(name="choose-抽獎", description="抽獎")
-    @app_commands.guild_only()
-    @app_commands.checks.has_role(cus_service_role_id)
-    async def choose_sth(self, interaction: Interaction):
-        if not isinstance(interaction.channel, TextChannel):
-            return await interaction.response.send_message(
-                "這裡不是客服頻道！", ephemeral=True
-            )
-
-        ticket = await self.ticket_manager.get_ticket(channel_id=interaction.channel.id)
-        if not ticket:
-            return await interaction.response.send_message(
-                "這裡不是客服頻道！", ephemeral=True
-            )
-        assert interaction.guild
-        assert isinstance(interaction.user, Member)
-
-        choices = {
-            "麥當勞 大蛋捲冰淇淋電子券": 0.4,
-            "50元購物金": 0.3,
-            "100元購物金": 0.1,
-            "Discord Nitro Basic一個月": 0.1,
-            "Discord Nitro一個月": 0.09,
-            "龍龍代購網600元以內商品任選一個": 0.01,
-        }
-        temp = [(choice, choices[choice] * 100) for choice in choices]
-
-        res_list = random.sample(
-            population=[ele[0] for ele in temp],
-            counts=[int(ele[1]) for ele in temp],
-            k=1,
-        )
-        result = res_list[0]
-        members = await self.ticket_manager.get_ticket_participants_member(
-            ticket_id=ticket.db_id
-        )
-        if not members:
-            return await interaction.response.send_message(
-                "Something is wrong...", ephemeral=True
-            )
-        members_mention = "".join([member.mention for member in members])
-        return await interaction.response.send_message(
-            f"{members_mention}恭喜您抽中**{result}**！"
-        )
-
-    @choose_sth.error
-    async def choose_sth_error(self, interaction: Interaction, error: AppCommandError):
-        if isinstance(error, MissingRole):
-            return await interaction.response.send_message(
-                "只有客服人員能夠使用此指令！", ephemeral=True
-            )
-
     @app_commands.command(name="r", description="回覆指令(只有客服人員能夠使用)")
     @app_commands.checks.has_role(cus_service_role_id)
     async def r(
@@ -653,7 +602,7 @@ class TicketsCog(Cog):
                 return await interaction.response.send_message(
                     "這個客服頻道沒有客戶，非常詭異", ephemeral=True
                 )
-            final_response = f"""{", ".join(map(lambda participant: participant.mention, participants))} 
+            final_response = f"""{", ".join(map(lambda participant: participant.mention, participants))}
 {final_response}"""
 
         await interaction.response.send_message(final_response)

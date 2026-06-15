@@ -1,0 +1,59 @@
+[2026-01-28 21:53:46] [ERROR   ] DragonBot: An unhandled error occurred:
+Traceback (most recent call last):
+  File "/home/susamogus/programming/DragonBot_new/main.py", line 118, in main
+    await bot.start(token=bot_token)
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/discord/client.py", line 846, in start
+    await self.login(token)
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/discord/client.py", line 689, in login
+    await self.setup_hook()
+  File "/home/susamogus/programming/DragonBot_new/main.py", line 70, in setup_hook
+    await self.async_db_manager.connect()
+  File "/home/susamogus/programming/DragonBot_new/db/database_manager.py", line 204, in connect
+    self._pool = await asyncpg.create_pool(self._db_url)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/pool.py", line 418, in _async__init__
+    await self._initialize()
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/pool.py", line 445, in _initialize
+    await first_ch.connect()
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/pool.py", line 132, in connect
+    self._con = await self._pool._get_new_connection()
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/pool.py", line 517, in _get_new_connection
+    con = await self._connect(
+          ^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+    )
+    ^
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/connection.py", line 2421, in connect
+    return await connect_utils._connect(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<20 lines>...
+    )
+    ^
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/connect_utils.py", line 1075, in _connect
+    raise last_error or exceptions.TargetServerAttributeNotMatched(
+    ...<2 lines>...
+    )
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/connect_utils.py", line 1049, in _connect
+    conn = await _connect_addr(
+           ^^^^^^^^^^^^^^^^^^^^
+    ...<6 lines>...
+    )
+    ^
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/connect_utils.py", line 886, in _connect_addr
+    return await __connect_addr(params, True, *args)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/connect_utils.py", line 931, in __connect_addr
+    tr, pr = await connector
+             ^^^^^^^^^^^^^^^
+  File "/home/susamogus/programming/DragonBot_new/.venv/lib/python3.13/site-packages/asyncpg/connect_utils.py", line 802, in _create_ssl_connection
+    tr, pr = await loop.create_connection(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+        host, port)
+        ^^^^^^^^^^^
+  File "/home/susamogus/.local/share/uv/python/cpython-3.13.11-linux-x86_64-gnu/lib/python3.13/asyncio/base_events.py", line 1179, in create_connection
+    raise OSError('Multiple exceptions: {}'.format(
+        ', '.join(str(exc) for exc in exceptions)))
+OSError: Multiple exceptions: [Errno 111] Connect call failed ('::1', 5432, 0, 0), [Errno 111] Connect call failed ('127.0.0.1', 5432)
+[2026-01-28 21:53:46] [INFO    ] DragonBot: Bot closed.
