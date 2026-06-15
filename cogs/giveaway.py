@@ -36,7 +36,7 @@ class Giveaway(Cog):
     @giveaway_operations.command(name="抽獎設定", description="設定抽獎獎項")
     @app_commands.guild_only()
     @app_commands.checks.has_role(cus_service_role_id)
-    async def choose_set(self, interaction: Interaction):
+    async def giveaway_set(self, interaction: Interaction):
         assert interaction.guild
         assert isinstance(interaction.user, Member)
 
@@ -45,7 +45,7 @@ class Giveaway(Cog):
     @giveaway_operations.command(name="choose-抽獎", description="抽獎")
     @app_commands.guild_only()
     @app_commands.checks.has_role(cus_service_role_id)
-    async def choose_sth(self, interaction: Interaction):
+    async def giveaway(self, interaction: Interaction):
         if not isinstance(interaction.channel, TextChannel) or not (
             ticket := await self.ticket_manager.get_ticket(
                 channel_id=interaction.channel.id
@@ -80,8 +80,26 @@ class Giveaway(Cog):
             f"{members_mention}恭喜您抽中**{result}**！"
         )
 
-    @choose_sth.error
-    async def choose_sth_error(
+    @giveaway.error
+    async def giveaway_error(
+        self, interaction: Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, app_commands.MissingRole):
+            return await interaction.response.send_message(
+                "只有客服人員能夠使用此指令！", ephemeral=True
+            )
+
+    @giveaway_list.error
+    async def giveaway_list_error(
+        self, interaction: Interaction, error: app_commands.AppCommandError
+    ):
+        if isinstance(error, app_commands.MissingRole):
+            return await interaction.response.send_message(
+                "只有客服人員能夠使用此指令！", ephemeral=True
+            )
+
+    @giveaway_set.error
+    async def giveaway_set_error(
         self, interaction: Interaction, error: app_commands.AppCommandError
     ):
         if isinstance(error, app_commands.MissingRole):
