@@ -3,7 +3,7 @@ from discord import Member, app_commands
 from discord import Interaction
 from discord.ext.commands import CommandError, Context
 from discord.ext import commands
-from config.constants import My_user_id
+from config.constants import MY_USER_ID
 
 
 class UserNotAdministrator(AppCommandError):
@@ -29,7 +29,7 @@ class IsNotDev(CommandError):
 
 def is_me_command():
     async def predicate(ctx: Context) -> bool:
-        if not ctx.author.id == My_user_id:
+        if not ctx.author.id == MY_USER_ID:
             raise IsNotDev
         return True
 
@@ -38,7 +38,7 @@ def is_me_command():
 
 def is_me_app_command():
     async def predicate(interaction: Interaction) -> bool:
-        if not interaction.user.id == My_user_id:
+        if not interaction.user.id == MY_USER_ID:
             raise IsNotDev
         return True
 
@@ -55,7 +55,7 @@ def is_administrator():
 
     async def predicate(interaction: Interaction) -> bool:
         # The bot owner should always be allowed to run admin commands.
-        if interaction.user.id == My_user_id:
+        if interaction.user.id == MY_USER_ID:
             return True
 
         # Check for guild context and administrator permissions.

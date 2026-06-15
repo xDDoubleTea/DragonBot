@@ -125,7 +125,9 @@ class QuestionModal(Modal):
                 required=True,
                 max_length=1500,
             )
+        footer = discord.ui.TextDisplay("若濫用此功能可能會被停權！")
         self.add_item(self.description_input)
+        self.add_item(footer)
 
     async def on_submit(self, interaction: Interaction) -> None:
         # Defer ephemerally. This shows a private "thinking" message
