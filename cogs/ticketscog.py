@@ -9,14 +9,12 @@ from discord import (
 )
 import discord
 import io
-import random
 from discord.app_commands import CommandOnCooldown, MissingRole
 from discord.app_commands.errors import AppCommandError, MissingPermissions
 from discord.ext import commands
 from discord.ext.commands import Cog
 from discord.ext.commands.errors import ChannelNotFound
 from discord.ext.commands.hybrid import app_commands
-from discord.message import PartialMessage
 from config.canned_response import ReplyKeys
 from config.constants import (
     MY_USER_ID,
@@ -42,7 +40,6 @@ from core.ticket_manager import TicketManager
 from core.ticket_panel_manager import TicketPanelManager
 from utils.embed_utils import create_themed_embed
 from view.feedback_views import FeedBackSystem, WordSelection
-from view.giveaway_settings import GiveawaySettings
 from view.ticket_views import (
     SetBusinessHoursModal,
     TicketAfterClose,
@@ -77,6 +74,7 @@ class TicketsCog(Cog):
     ):
         self.bot = bot
         self.ticket_manager = ticket_manager
+        self.logger = ticket_manager.logger
         self.ticket_panel_manager = ticket_panel_manager
         self.feedback_manager = feedback_manager
         self.panel_messages: Dict[int, PanelMessageData] = (
@@ -91,7 +89,6 @@ class TicketsCog(Cog):
             await interaction.response.send_message(
                 "你不是管理員，沒有權限使用此指令！", ephemeral=True
             )
-        # Handle cases where the interaction has already been responded to
         elif isinstance(error, discord.errors.InteractionResponded):
             await interaction.followup.send(
                 "發生了一個內部錯誤，但已成功回覆。", ephemeral=True
@@ -106,8 +103,7 @@ class TicketsCog(Cog):
                 ephemeral=True,
             )
         else:
-            # For other errors, you can log them or send a generic message
-            print(f"An unhandled error occurred in RoleRequest cog: {error}")
+            self.logger.error(f"An unhandled error occurred in Tickets cog: {error}")
             if not interaction.response.is_done():
                 await interaction.response.send_message(
                     f"發生未知的錯誤: {error}", ephemeral=True
@@ -118,15 +114,15 @@ class TicketsCog(Cog):
                 )
 
     async def restore_feedback_prompt_view(self):
-        print("Restoring feedback prompts.")
+        self.logger.info("Restoring feedback prompts.")
         prompts = await self.feedback_manager.get_all_feedback_prompts()
         if not prompts:
-            print("Nothing to restore...Skipping")
+            self.logger.debug("Nothing to restore...Skipping")
             return
         for prompt in prompts:
             user = await try_get_user(bot=self.bot, user_id=prompt.user_id)
             if not user:
-                print(f"User with id {prompt.user_id} not found, skipping.")
+                self.logger.debug(f"User with id {prompt.user_id} not found, skipping.")
                 await self.feedback_manager.remove_user_feedback_prompt(
                     user_id=prompt.user_id,
                     ticket_id=prompt.ticket_id,
@@ -138,7 +134,7 @@ class TicketsCog(Cog):
             )
 
             if not dm_channel:
-                print(
+                self.logger.debug(
                     "User has no dm channel associated with the bot, maybe it has been deleted by user, skipping."
                 )
                 await self.feedback_manager.remove_user_feedback_prompt(
@@ -157,13 +153,13 @@ class TicketsCog(Cog):
                     ticket_id=prompt.ticket_id,
                     guild_id=prompt.guild_id,
                 )
-                print(
+                self.logger.debug(
                     f"Message with ID {prompt.message_id} was not found in the dm channel, this is unexpected, skipping for now."
                 )
                 continue
             try:
                 if prompt.message_type == FeedbackPromptMessageType.RATING:
-                    print(
+                    self.logger.debug(
                         f"Restoring rating buttons for {user.name} with ticket id {prompt.ticket_id}."
                     )
                     view = FeedBackSystem(
@@ -174,7 +170,7 @@ class TicketsCog(Cog):
                     )
                     view.message = await message.edit(view=view)
                 elif prompt.message_type == FeedbackPromptMessageType.SELECT:
-                    print(
+                    self.logger.debug(
                         f"Restoring drop down menu for {user.name} with ticket id {prompt.ticket_id}."
                     )
 
@@ -186,9 +182,9 @@ class TicketsCog(Cog):
                     )
                     view.message = await message.edit(view=view)
             except discord.errors.NotFound:
-                print("That message was not found.")
+                self.logger.error("Feedback prompt was not found.")
                 pass
-        print("Done!")
+        self.logger.info("Done restoring feedback prompt")
 
     @Cog.listener(name="on_ready")
     async def on_ready(self):
@@ -229,23 +225,23 @@ class TicketsCog(Cog):
             try:
                 await message.edit(view=view)
             except discord.errors.NotFound:
-                print("The message might have been deleted.")
+                self.logger.debug("Ticket panel message might have been deleted.")
                 assert message.channel.guild
                 await self.ticket_panel_manager.delete_panel_by_guild_id(
                     guild_id=message.channel.guild.id,
                 )
             except Exception as e:
-                print(e)
+                self.logger.error(e)
 
-        print("Done!")
+        self.logger.debug("Done restoring ticket panels")
 
     async def restore_close_buttons(self):
-        print("Restoring all close buttons...")
+        self.logger.info("Restoring all close buttons...")
         all_tickets = await self.ticket_manager.database_manager.select(
             table_name="tickets"
         )
         if not all_tickets:
-            print("No tickets found in database, skipping...")
+            self.logger.debug("No tickets found in database, skipping...")
             return
         assert isinstance(all_tickets, list)
         close_view: List[
@@ -264,12 +260,14 @@ class TicketsCog(Cog):
             guild_id = ticket.guild_id
             guild = await self._try_get_guild(guild_id=guild_id)
             if not guild:
-                print(f"Could not find the guild with guild id {guild_id}, skipping...")
+                self.logger.debug(
+                    f"Could not find the guild with guild id {guild_id}, skipping..."
+                )
                 continue
             channel_id = ticket.channel_id
             channel = await try_get_channel(guild=guild, channel_id=channel_id)
             if not channel or not isinstance(channel, TextChannel):
-                print(
+                self.logger.debug(
                     f"Could not find the channel with id {channel_id}, deleting ticket {ticket.db_id} from database."
                 )
                 await self.ticket_manager.database_manager.delete(
@@ -279,28 +277,32 @@ class TicketsCog(Cog):
                 continue
             try:
                 message = await channel.fetch_message(close_msg_id)
-                print(f"Restoring close buttons in ticket with id {ticket.db_id}")
+                self.logger.debug(
+                    f"Restoring close buttons in ticket with id {ticket.db_id}"
+                )
                 view = close_view[CloseMessageType(close_msg_type)](
                     ticket_manager=self.ticket_manager,
                 )
                 await message.edit(view=view)
-                print(f"Setting channel name for ticket with id {ticket.db_id}")
+                self.logger.debug(
+                    f"Setting channel name for ticket with id {ticket.db_id}"
+                )
                 await self.ticket_manager.set_ticket_status(
                     ticket=ticket,
                     new_status=ticket.status,
                 )
             except discord.errors.NotFound:
-                print(
+                self.logger.debug(
                     f"Could not find the closing message with id {close_msg_id}. Resending the close button message."
                 )
                 # TODO: Send new close button message
             except Exception as e:
-                print("Error: ", e)
+                self.logger.error(e)
         if deleted_tickets_id:
             await self.ticket_manager.database_manager.delete(
                 table_name="tickets", criteria={"id": deleted_tickets_id}
             )
-        print("Done!")
+        self.logger.info("Done restoring tickets.")
 
     @Cog.listener(name="on_message")
     async def on_message(self, message: Message):
@@ -462,7 +464,7 @@ class TicketsCog(Cog):
         except discord.errors.NotFound:
             pass
         except Exception as e:
-            print(e)
+            self.logger.error(e)
         msg = await interaction.channel.send(
             content=ticket_system_main_message(
                 role=cus_service_role, cmd_channel=cmd_channel

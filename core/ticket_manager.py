@@ -1,4 +1,5 @@
 import io
+import logging
 import discord
 from discord import Guild, User, Member, Embed, TextChannel, Client
 from discord.abc import GuildChannel
@@ -51,9 +52,11 @@ class TicketManager:
         bot: Bot | Client,
         database_manager: AsyncDatabaseManager,
         feedback_manager: FeedbackManager,
+        logger: logging.Logger,
     ):
         self.database_manager = database_manager
         self.bot = bot
+        self.logger = logger
         self.ticket_table_name = "tickets"
         self.feedback_manager = feedback_manager
         self.ticket_panels_table_name = "ticket_panels"
@@ -91,7 +94,6 @@ class TicketManager:
             with open("config.yaml", "r") as file:
                 config = yaml.safe_load(file)
                 business_hours = config.get("business_hours", [])
-                # print(business_hours)
                 for x in business_hours:
                     embed.add_field(
                         name=f"星期{eng_to_chinese[x['day']]}",
@@ -108,7 +110,7 @@ class TicketManager:
         This function should be called when the bot starts.
         """
         # Load ticket panels into cache
-        print("Loading ticket panels into cache...")
+        self.logger.info("Loading ticket panels into cache...")
         ticket_panels = await self.database_manager.select(
             table_name=self.ticket_panels_table_name
         )
@@ -118,8 +120,8 @@ class TicketManager:
                 channel_id=panel["channel_id"],
                 guild_id=panel["guild_id"],
             )
-        print("Ticket panels loaded into cache.")
-        print("Loading tickets into cache...")
+        self.logger.info("Ticket panels loaded into cache.")
+        self.logger.info("Loading tickets into cache...")
         # Load tickets into cache
         tickets = await self.database_manager.select(table_name=self.ticket_table_name)
         for ticket_data in tickets:
@@ -139,7 +141,7 @@ class TicketManager:
             ticket.participants = set(participants) if participants else set()
 
             self.ticket_caches[ticket.db_id] = ticket
-        print("Tickets loaded into cache.")
+        self.logger.info("Tickets loaded into cache.")
 
     async def is_ticket_channel(self, channel_id: int) -> bool:
         return True if await self.get_ticket(channel_id=channel_id) else False
@@ -292,7 +294,7 @@ class TicketManager:
             )
             self.ticket_caches[ticket.db_id].participants.add(participant_id)
         except Exception as e:
-            print(
+            self.logger.error(
                 f"Error occured when adding user with id {participant_id} into database. {e}"
             )
 
@@ -317,8 +319,8 @@ class TicketManager:
         for part_id in participants_id:
             member = await try_get_member(guild=channel.guild, member_id=part_id)
             if not member:
-                print(
-                    f"Warning: Could not find member with ID {part_id} in guild {channel.guild.id} to update permissions."
+                self.logger.warning(
+                    f"Could not find member with ID {part_id} in guild {channel.guild.id} to update permissions."
                 )
                 continue
             if allow_read and part_id not in current_participants:
@@ -467,7 +469,7 @@ class TicketManager:
             )
             return result["close_msg_id"]
         except (AssertionError, KeyError):
-            print(
+            self.logger.error(
                 f"Error retrieving close message ID for channel {channel_id}: {result}"
             )
             return None
@@ -615,8 +617,8 @@ class TicketManager:
                 customers.append(member)
                 cus_num += 1
             else:
-                print(
-                    f"Warning: Could not find member with ID {part_id} in guild with id {ticket.guild_id}."
+                self.logger.warning(
+                    f"Could not find member with ID {part_id} in guild with id {ticket.guild_id}."
                 )
             # Generate the channel history archive
         customers_mention = customers_mention.rstrip(", ")
@@ -684,19 +686,19 @@ class TicketManager:
                             message_type=FeedbackPromptMessageType.RATING,
                         )
                     except discord.errors.Forbidden:
-                        print(
+                        self.logger.error(
                             f"User {customer.name} does not allow private messages, skipping..."
                         )
                     except Exception as e:
-                        print(f"Error: {e}")
+                        self.logger.error(e)
         except subprocess.CalledProcessError as e:
             # This block will run if the exporter command fails
-            print(f"Error exporting channel {channel.id}: {e}")
+            self.logger.error(f"Error exporting channel {channel.id}: {e}")
             await channel.send(content="錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
             raise Exception("錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
         except FileNotFoundError:
             # This block will run if the DiscordChatExporter.Cli executable is not found
-            print("Error: DiscordChatExporter.Cli not found.")
+            self.logger.error("DiscordChatExporter.Cli not found.")
             await channel.send(content="錯誤：找不到匯出工具。")
             raise FileNotFoundError("Error: DiscordChatExporter.Cli not found.")
 
@@ -756,8 +758,8 @@ class TicketManager:
         try:
             await self.set_ticket_channel_name(ticket=ticket)
         except TicketNotFound as e:
-            print(
-                f"Error: {e}. The channel with the ticket's channel_id was not found in the guild."
+            self.logger.error(
+                f"{e}. The channel with the ticket's channel_id was not found in the guild."
             )
             # We delete the record in the cache since the ticket should likely have been deleted
             self.ticket_caches.pop(ticket.db_id)
