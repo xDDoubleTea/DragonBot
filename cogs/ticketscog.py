@@ -117,7 +117,7 @@ class TicketsCog(Cog):
         self.logger.info("Restoring feedback prompts.")
         prompts = await self.feedback_manager.get_all_feedback_prompts()
         if not prompts:
-            self.logger.debug("Nothing to restore...Skipping")
+            self.logger.info("Nothing to restore...Skipping")
             return
         for prompt in prompts:
             user = await try_get_user(bot=self.bot, user_id=prompt.user_id)

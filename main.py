@@ -46,10 +46,11 @@ class DragonBot(commands.Bot):
         self.ticket_manager = TicketManager(
             bot=self,
             database_manager=self.async_db_manager,
+            logger=self.logger,
             feedback_manager=self.feedback_manager,
         )
         self.ticket_panel_manager = TicketPanelManager(
-            bot=self, database_manager=self.async_db_manager
+            bot=self, database_manager=self.async_db_manager, logger=self.logger
         )
         self.keyword_manager = KeywordManager(
             bot=self, database_manager=self.async_db_manager
@@ -59,7 +60,7 @@ class DragonBot(commands.Bot):
         )
 
     async def on_ready(self):
-        print(f"{self.user} is now online!")
+        self.logger.info(f"{self.user} is now online!")
         await self.change_presence(
             activity=discord.Game(f"Developed by {self.get_user(MY_USER_ID)}")
         )
@@ -68,12 +69,12 @@ class DragonBot(commands.Bot):
 
     async def setup_hook(self):
         await self.async_db_manager.connect()
-        print("Connected to the database")
+        self.logger.debug("Connected to the database")
         await self.keyword_manager.initialize_cache()
-        print("Keyword cache initialized")
-        print("Initializing role request data cache")
+        self.logger.debug("Keyword cache initialized")
+        self.logger.debug("Initializing role request data cache")
         await self.role_request_manager.init_cache()
-        print("Role request data cache initialized")
+        self.logger.debug("Role request data cache initialized")
         await self.ticket_manager.init_cache()
         for cog in filter(
             lambda file: file.endswith(".py"),
@@ -109,7 +110,8 @@ async def main():
             sig, lambda s=sig: asyncio.create_task(shutdown(s, loop))
         )
 
-    setup_logger(log_level=logging.DEBUG)
+    log_level = logging.DEBUG if app_mode == "test" else logging.INFO
+    setup_logger(log_level=log_level)
 
     intents = discord.Intents.all()
     bot = DragonBot(intents=intents, logger=logging.getLogger("DragonBot"))
