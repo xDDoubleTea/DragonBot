@@ -1,3 +1,5 @@
+from logging import Logger
+
 from discord import TextStyle, Interaction
 from discord.ui import Modal, TextInput
 import json
@@ -8,6 +10,7 @@ from utils.giveaway_embed import giveaway_settings_to_embed
 class GiveawaySettings(Modal):
     def __init__(
         self,
+        logger: Logger,
         title: str = "抽獎設定",
     ):
         super().__init__(title=title)
