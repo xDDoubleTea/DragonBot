@@ -352,3 +352,4 @@ tags
 test.py
 config_test.yaml
 /logs
+docker-compose.yml
