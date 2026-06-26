@@ -6,7 +6,6 @@ from discord.ext.commands import Cog
 
 from core.ticket_manager import TicketManager
 from config.constants import cus_service_role_id
-from utils.embed_utils import create_themed_embed
 from utils.giveaway_embed import giveaway_settings_to_embed
 from view.giveaway_settings import GiveawaySettings
 import random
