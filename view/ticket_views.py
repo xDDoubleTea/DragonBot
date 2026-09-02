@@ -60,7 +60,7 @@ class SetBusinessHoursModal(Modal):
 
     async def on_submit(self, interaction: Interaction) -> None:
         try:
-            result = self.parse_input(self.business_hour.value)
+            result = {"business_hours": self.parse_input(self.business_hour.value)}
             with open("config.yaml", "w") as file:
                 yaml.safe_dump(result, file)
             await interaction.response.send_message(
@@ -125,7 +125,9 @@ class QuestionModal(Modal):
                 required=True,
                 max_length=1500,
             )
+        footer = discord.ui.TextDisplay("若濫用此功能可能會被停權！")
         self.add_item(self.description_input)
+        self.add_item(footer)
 
     async def on_submit(self, interaction: Interaction) -> None:
         # Defer ephemerally. This shows a private "thinking" message
@@ -188,7 +190,9 @@ class QuestionModal(Modal):
 
         except Exception as e:
             print(f"Error during modal ticket creation: {e}")
-            await interaction.followup.send("❌ 建立頻道時發生錯誤，請稍後再試一次！")
+            await interaction.followup.send(
+                "❌ 建立頻道時發生錯誤，請稍後再試一次！", ephemeral=True
+            )
 
 
 class TicketCreationView(View):

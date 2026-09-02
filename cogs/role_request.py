@@ -12,7 +12,7 @@ from core.role_requesting_manager import (
     RoleAlreadyNotRequestable,
 )
 from utils.embed_utils import create_themed_embed
-from view.role_request_view import request_view
+from view.role_request_view import RequestView
 from utils.discord_utils import get_or_fetch
 
 
@@ -371,7 +371,7 @@ class RoleRequest(Cog):
         if yt_channel_url:
             embed.description += f"\n提供YT頻道：{yt_channel_url}"
         assert isinstance(approval_cnl, discord.TextChannel)
-        view = request_view(role=role, member=interaction.user)
+        view = RequestView(role=role, member=interaction.user)
         await approval_cnl.send(embed=embed, view=view)
         return await interaction.followup.send(
             "已經將您提供的資料交由管理員審核！請耐心等候。\n您所提供的資料如下：",

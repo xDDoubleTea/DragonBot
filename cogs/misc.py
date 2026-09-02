@@ -5,7 +5,7 @@ from discord.abc import GuildChannel, Messageable
 from typing import Literal, Union, Optional
 import requests
 import bs4
-from config.constants import currency_information_url
+from config.constants import CURRENCY_INFO_URL
 from core.keyword_manager import KeywordManager
 from core.ticket_manager import TicketManager
 from main import DragonBot
@@ -22,7 +22,7 @@ class misc(Cog):
         self.keyword_manager = keyword_manager
 
     async def get_currency(self, cur: str) -> Union[None, float]:
-        url = currency_information_url
+        url = CURRENCY_INFO_URL
         req = requests.get(url)
         soup = bs4.BeautifulSoup(req.text, "html.parser")
 

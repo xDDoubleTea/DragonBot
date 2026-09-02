@@ -1,3 +1,4 @@
+import logging
 from typing import List, Dict
 from asyncpg import NoDataFoundError, UniqueViolationError
 from discord import Client, Guild, TextChannel
@@ -17,8 +18,14 @@ class PanelNotFound(Exception):
 
 
 class TicketPanelManager:
-    def __init__(self, bot: Client | Bot, database_manager: AsyncDatabaseManager):
+    def __init__(
+        self,
+        bot: Client | Bot,
+        database_manager: AsyncDatabaseManager,
+        logger: logging.Logger,
+    ):
         self.bot = bot
+        self.logger = logger
         self.database_manager = database_manager
         self.ticket_panels_table_name = "ticket_panels"
         self.ticket_panels: Dict[int, PanelMessageData] = dict()
@@ -103,9 +110,11 @@ class TicketPanelManager:
         all_panels = await self.database_manager.select(
             table_name=self.ticket_panels_table_name
         )
-        print("Restoring ticket panels....")
+        self.logger.info("Restoring ticket panels....")
         if not all_panels:
-            print("No ticket panels found in the database. Skipping restoration.")
+            self.logger.info(
+                "No ticket panels found in the database. Skipping restoration."
+            )
             return []
         assert isinstance(all_panels, list)
         restore_message = []
@@ -115,14 +124,14 @@ class TicketPanelManager:
             message_id = panel.get("message_id")
             assert guild_id and channel_id and message_id
             try:
-                print(f"Restoring panel for guild with ID {guild_id}")
+                self.logger.debug(f"Restoring panel for guild with ID {guild_id}")
                 get_panel_data = await self._try_get_panel(
                     panel_message_data=PanelMessageData(
                         guild_id=guild_id, channel_id=channel_id, message_id=message_id
                     )
                 )
                 if not get_panel_data:
-                    print(
+                    self.logger.debug(
                         f"Cannot find panel with (guild_id, channel_id, message_id) == ({guild_id}, {channel_id}, {message_id}). Skipping..."
                     )
                     await self.database_manager.delete(
@@ -137,7 +146,7 @@ class TicketPanelManager:
                 )
 
             except Exception as e:
-                print(
+                self.logger.error(
                     f"An error occurred while re-attaching view for guild {guild_id}: {e}"
                 )
         return restore_message
@@ -177,7 +186,7 @@ class TicketPanelManager:
         except NoDataFoundError:
             pass
         except Exception as e:
-            print(e)
+            self.logger.error(e)
 
     async def delete_panel_by_guild_id(self, guild_id: int):
         self.ticket_panels.pop(guild_id, None)
@@ -189,4 +198,4 @@ class TicketPanelManager:
         except NoDataFoundError:
             pass
         except Exception as e:
-            print(e)
+            self.logger.error(e)

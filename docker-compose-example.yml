@@ -1,0 +1,11 @@
+services:
+  leetcode-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dragonbot
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Taipei
+    env_file:
+      - .env

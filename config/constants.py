@@ -1,16 +1,17 @@
-from discord import Role, TextChannel, Color, Object
-from dotenv import load_dotenv
 import os
+
+from discord import Color, Object, Role, TextChannel
+from dotenv import load_dotenv
 
 __all__ = [
     "bot_token",
     "pre",
     "eng_to_chinese",
-    "currency_information_url",
-    "My_user_id",
-    "version",
-    "MyDiscordID",
-    "default_footer",
+    "CURRENCY_INFO_URL",
+    "MY_USER_ID",
+    "VERSION",
+    "MY_DISCORD_ID",
+    "DEFAULT_FOOTER",
     "cmd_channel_id",
     "cus_service_role_id",
     "THEME_COLOR",
@@ -23,28 +24,37 @@ __all__ = [
     "DS01",
     "DISCORD_EMOJI",
     "ticket_system_main_message",
-    "app_mode",
     "db_url",
     "admin_role_id",
     "epic_dragon_role_id",
     "rare_dragon_role_id",
     "exporter_bot_token",
 ]
-load_dotenv()
-app_mode = os.getenv("APP_MODE")
-exporter_bot_token = os.getenv("EXPORTER_BOT_TOKEN")
-assert app_mode in ["test", "prod"], "APP_MODE must be either 'test' or 'prod'"
-app_mode = app_mode.lower()
-db_url = (
-    os.getenv("DATABASE_PROD_URL")
-    if app_mode == "prod"
-    else os.getenv("DATABASE_TEST_URL")
-)
-pre = os.getenv("PREFIX_PROD") if app_mode == "prod" else os.getenv("PREFIX_TEST")
-bot_token = (
-    os.getenv("BOT_TOKEN_PROD") if app_mode == "prod" else os.getenv("BOT_TOKEN_TEST")
-)
 
+
+load_dotenv()
+
+
+def get_required_env(key: str) -> str:
+    val = os.getenv(key)
+    if not val:
+        exit(f"{key} is not configured!")
+    return val
+
+
+def get_required_env_to_int(key: str) -> int:
+    val = get_required_env(key)
+    if not val.isdigit():
+        exit(f"{key} must be an integer!")
+    return int(val)
+
+
+bot_token = get_required_env("BOT_TOKEN")
+exporter_bot_token = get_required_env("EXPORTER_BOT_TOKEN")
+db_url = get_required_env("DATABASE_URL")
+pre = get_required_env("CMD_PREFIX")
+
+LOG_LEVEL = os.getenv("LOG_LEVEL")
 
 eng_to_chinese = {
     "Monday": "一",
@@ -57,19 +67,21 @@ eng_to_chinese = {
 }
 
 
-My_user_id = 398444155132575756
-version = 4.0
-MyDiscordID = "hoshiyomi6942"
-default_footer = f"Developed by {MyDiscordID} version:{version}"
+MY_USER_ID = 398444155132575756
+VERSION = 4.0
+MY_DISCORD_ID = "hoshiyomi6942"
+DEFAULT_FOOTER = f"Developed by {MY_DISCORD_ID} version:{VERSION}"
 
 
-cmd_channel_id = 461556173011943435 if app_mode == "prod" else 1073168107813740556
+# What is this for?
 # In production guild, cmd_channel_id is 461556173011943435
 # In test guild, cmd_channel_id is 1073168107813740556
+cmd_channel_id = get_required_env_to_int("CMD_CHANNEL_ID")
 
-cus_service_role_id = 856792148060667934 if app_mode == "prod" else 1388896580173828188
+
 # In production guild, cus_service_role_id is 856792148060667934
 # In test guild, cus_service_role_id is 1388896580173828188
+cus_service_role_id = get_required_env_to_int("CUS_SERVICE_ROLE_ID")
 
 THEME_COLOR = Color.from_rgb(190, 119, 255)
 ericdragon_user_id = 403844178687033345
@@ -78,41 +90,40 @@ admin_role_id = 740487435015946271
 epic_dragon_role_id = 740487435015946271
 rare_dragon_role_id = 446617194743201792
 
-logchannel_id = 977445485180751882 if app_mode == "prod" else 1388896453446991902
+logchannel_id = get_required_env_to_int("LOG_CHANNEL_ID")
+
+# What is this for?
 # In production guild, logchannel is 977445485180751882
 # In test guild, logchannel is 1388896453446991902
 
-archive_channel_id = 1015983550782263356 if app_mode == "prod" else 1390385918816292895
+archive_channel_id = get_required_env_to_int("ARCHIVE_CHANNEL_ID")
 
-app_id = 973570456076558406 if app_mode == "prod" else 865240620233785344
 # In production guild, app_id is 973570456076558406
 # In test guild, app_id is 865240620233785344
+app_id = get_required_env_to_int("APP_ID")
 
-feedback_channel_id = 976831519995875338 if app_mode == "prod" else 1390873409143046225
+feedback_channel_id = get_required_env_to_int("FEEDBACK_CHANNEL_ID")
 
 
-MY_GUILD = (
-    Object(id=1039906085626196079)
-    if app_mode == "test"
-    else Object(id=403844884374487040)
-)
 # guild dragon 403844884374487040
 # test guild 1039906085626196079
+MY_GUILD = Object(id=1039906085626196079)
 
-currency_information_url = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
+
+CURRENCY_INFO_URL = "https://rate.bot.com.tw/xrt?Lang=zh-TW"
 
 DS01 = "<:ds01:894967438733606943>"
 DISCORD_EMOJI = "<:discord:934326257699663872>"
 
 
 def ticket_system_main_message(role: Role, cmd_channel: TextChannel):
-    xd = f"""
-# ⭐ 客服開單系統 ⭐ 
+    return f"""
+# ⭐ 客服開單系統 ⭐
 > **請務必詳閱以下內容後，再開啟客服單為您服務**
-## 1. 開單前請確認需求  
+## 1. 開單前請確認需求
 - 請確認需求，有需要問問題或聯絡客服人員再開啟，**勿惡意或反覆開啟關閉**，違者將**警告懲處**。
-## 2. 查詢訂單進度請先至網站  
-- 進入：[我的帳號 → 訂單](https://dragonshop.org/my-account/orders) 查看處理狀態。  
+## 2. 查詢訂單進度請先至網站
+- 進入：[我的帳號 → 訂單](https://dragonshop.org/my-account/orders) 查看處理狀態。
 - 若在**營業時間內**付款後 **1 小時仍未處理**，再開單並提供訂單編號即可。
 ## 3. 開啟私人頻道後請注意以下事項：
 - 於開單時 **直接輸入詳細問題內容送出後等待回覆**，請勿洗版、重複Tag、持續追問，客服並非 24 小時盯著訊息。
@@ -131,4 +142,3 @@ def ticket_system_main_message(role: Role, cmd_channel: TextChannel):
 【平日】下午6點
 【假日】中午12點-起至凌晨12點```
 """
-    return xd

@@ -351,3 +351,5 @@ tags
 # End of https://www.toptal.com/developers/gitignore/api/vim,linux,python,pycharm,visualstudiocode
 test.py
 config_test.yaml
+/logs
+docker-compose.yml

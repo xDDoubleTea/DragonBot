@@ -3,7 +3,7 @@ from discord.ui import Modal, View, Button, button, TextInput
 from discord.errors import Forbidden
 
 
-class reason_Modal(Modal):
+class ReasonModal(Modal):
     def __init__(self, embed: Embed, role_name: str, member: Member):
         super().__init__(title="不通過之原因", timeout=None)
         self.embed = embed
@@ -32,7 +32,7 @@ class reason_Modal(Modal):
         await interaction.message.edit(embed=self.embed)
 
 
-class request_view(View):
+class RequestView(View):
     def __init__(self, role: Role, member: Member):
         super().__init__(timeout=None)
         self.role = role
@@ -61,7 +61,7 @@ class request_view(View):
             assert interaction.message
             await interaction.message.edit(view=None)
             return await interaction.response.send_modal(
-                reason_Modal(
+                ReasonModal(
                     embed=interaction.message.embeds[0],
                     role_name=self.role.name,
                     member=self.member,
