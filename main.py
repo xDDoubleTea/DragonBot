@@ -1,26 +1,27 @@
 import asyncio
-import os
 import logging
+import os
+import signal
+
 import discord
 from discord.ext import commands
+
 from config import (
-    pre,
-    app_id,
-    bot_token,
+    MY_GUILD,
     MY_USER_ID,
     VERSION,
-    app_mode,
+    app_id,
+    bot_token,
     db_url,
-    MY_GUILD,
+    pre,
 )
+from config.logger import setup_logger
 from core.feedback_manager import FeedbackManager
+from core.keyword_manager import KeywordManager
 from core.role_requesting_manager import RoleRequestManager
 from core.ticket_manager import TicketManager
-from core.keyword_manager import KeywordManager
 from core.ticket_panel_manager import TicketPanelManager
 from db.database_manager import AsyncDatabaseManager, DatabaseManager
-import signal
-from config.logger import setup_logger
 
 
 class DragonBot(commands.Bot):
@@ -30,7 +31,7 @@ class DragonBot(commands.Bot):
             command_prefix=pre,
             intents=intents,
             help_command=None,
-            description=f"Dragon Bot version {VERSION}\n Mode {app_mode}",
+            description=f"Dragon Bot version {VERSION}",
             application_id=app_id,
         )
         assert db_url is not None
@@ -110,7 +111,7 @@ async def main():
             sig, lambda s=sig: asyncio.create_task(shutdown(s, loop))
         )
 
-    log_level = logging.DEBUG if app_mode == "test" else logging.INFO
+    log_level = logging.DEBUG
     setup_logger(log_level=log_level)
 
     intents = discord.Intents.all()
