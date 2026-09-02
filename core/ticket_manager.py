@@ -37,8 +37,9 @@ from utils.discord_utils import (
     try_get_member,
 )
 from utils.embed_utils import create_themed_embed
+from discord.utils import format_dt
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 
 import tempfile
 import pathlib
@@ -642,10 +643,8 @@ class TicketManager:
                 filename=f"{filename}",
             )
 
-            UTC_to_GMT = timedelta(hours=8)
-            new = channel.created_at + UTC_to_GMT
-            created_time_str = new.strftime("%Y/%m/%d %H:%M:%S")
-            closed_time_str = datetime.now().strftime("%Y/%m/%d %H:%M:%S")
+            created_time_str = format_dt(channel.created_at, style="F")
+            closed_time_str = format_dt(datetime.now(timezone.utc), style="F")
 
             archive_embed = discord.Embed(
                 title=f"頻道 「{channel.name}」紀錄",
