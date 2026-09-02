@@ -54,6 +54,7 @@ exporter_bot_token = get_required_env("EXPORTER_BOT_TOKEN")
 db_url = get_required_env("DATABASE_URL")
 pre = get_required_env("CMD_PREFIX")
 
+LOG_LEVEL = os.getenv("LOG_LEVEL")
 
 eng_to_chinese = {
     "Monday": "一",

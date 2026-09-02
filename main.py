@@ -15,6 +15,7 @@ from config import (
     db_url,
     pre,
 )
+from config.constants import LOG_LEVEL
 from config.logger import setup_logger
 from core.feedback_manager import FeedbackManager
 from core.keyword_manager import KeywordManager
@@ -111,7 +112,7 @@ async def main():
             sig, lambda s=sig: asyncio.create_task(shutdown(s, loop))
         )
 
-    log_level = logging.DEBUG
+    log_level = logging.DEBUG if LOG_LEVEL == "debug" else logging.INFO
     setup_logger(log_level=log_level)
 
     intents = discord.Intents.all()
