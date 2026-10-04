@@ -26,6 +26,8 @@ from config.constants import (
     THEME_COLOR,
     archive_channel_id,
     exporter_bot_token,
+    EXPORT_TIMEOUT_SECONDS,
+    SLOW_RENAME_LOG_SECONDS,
 )
 
 import asyncio
@@ -47,14 +49,6 @@ import pathlib
 from view.feedback_views import FeedBackSystem, feedbackEmbed
 
 
-# DiscordChatExporter has no timeout of its own; a hung export used to block
-# closing the ticket forever.
-EXPORT_TIMEOUT_SECONDS = 180
-# Discord allows only 2 channel renames per channel per 10 minutes. Renames that
-# wait longer than this are logged so the delay is visible.
-SLOW_RENAME_LOG_SECONDS = 5
-
-
 class TicketManager:
     def __init__(
         self,
@@ -72,7 +66,7 @@ class TicketManager:
         self.ticket_participants_table_name = "ticket_participants"
         self.panel_messages: Dict[int, PanelMessageData] = dict()
         self.ticket_caches: Dict[int, Ticket] = dict()
-        # channel_id -> pending rename task; a newer status cancels the older rename
+        # channel_id -> pending rename task
         self._rename_tasks: Dict[int, asyncio.Task] = dict()
 
     async def _try_get_channel_by_bot(
@@ -775,9 +769,8 @@ class TicketManager:
             criteria={"id": ticket.db_id},
         )
         self.ticket_caches[ticket.db_id] = ticket
-        # Renaming is rate limited to 2 per 10 minutes per channel, and discord.py
-        # waits out the limit silently. Awaiting it here stalled closing a ticket
-        # for up to 10 minutes, so the rename runs in the background instead.
+        # Channel renames are limited to 2 per 10 minutes per channel and discord.py
+        # waits out the limit silently, so awaiting the rename could block for minutes.
         self._schedule_channel_rename(ticket=ticket)
 
     def _cancel_pending_rename(self, channel_id: int) -> None:
