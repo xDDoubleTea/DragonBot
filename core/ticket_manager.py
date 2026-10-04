@@ -26,6 +26,8 @@ from config.constants import (
     THEME_COLOR,
     archive_channel_id,
     exporter_bot_token,
+    EXPORT_TIMEOUT_SECONDS,
+    SLOW_RENAME_LOG_SECONDS,
 )
 
 import asyncio
@@ -64,6 +66,8 @@ class TicketManager:
         self.ticket_participants_table_name = "ticket_participants"
         self.panel_messages: Dict[int, PanelMessageData] = dict()
         self.ticket_caches: Dict[int, Ticket] = dict()
+        # channel_id -> pending rename task
+        self._rename_tasks: Dict[int, asyncio.Task] = dict()
 
     async def _try_get_channel_by_bot(
         self, channel_id: int
@@ -577,7 +581,13 @@ class TicketManager:
             str(output_path),
         ]
         # This is the blocking call
-        subprocess.run(command, capture_output=True, text=True, check=True)
+        subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=EXPORT_TIMEOUT_SECONDS,
+        )
 
         exported_files = list(output_path.glob("*.html"))
         if not exported_files:
@@ -695,6 +705,12 @@ class TicketManager:
             self.logger.error(f"Error exporting channel {channel.id}: {e}")
             await channel.send(content="錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
             raise Exception("錯誤：生成頻道紀錄時發生問題，請檢查後台日誌。")
+        except subprocess.TimeoutExpired:
+            self.logger.error(
+                f"Exporting channel {channel.id} timed out after {EXPORT_TIMEOUT_SECONDS}s."
+            )
+            await channel.send(content="錯誤：生成頻道紀錄逾時，請檢查後台日誌。")
+            raise Exception("錯誤：生成頻道紀錄逾時，請檢查後台日誌。")
         except FileNotFoundError:
             # This block will run if the DiscordChatExporter.Cli executable is not found
             self.logger.error("DiscordChatExporter.Cli not found.")
@@ -708,6 +724,7 @@ class TicketManager:
         # Delete the ticket from the cache
         if ticket.db_id in self.ticket_caches.keys():
             del self.ticket_caches[ticket.db_id]
+        self._cancel_pending_rename(channel_id=channel.id)
         await self.database_manager.delete(
             table_name=self.ticket_table_name, criteria={"id": ticket.db_id}
         )
@@ -739,9 +756,7 @@ class TicketManager:
             new_status (TicketStatus): The new status to be set.
             guild (Optional[Guild]): The guild that the ticket is in.
             ticket_channel (Optional[TextChannel]): The textchannel object of the ticket.
-        Raises:
-            discord.errors.NotFound, if the channel or the guild (the latter is unlikely) was deleted.
-            TicketNotFound, if the channel with the ticket's channel_id was not found in the guild.
+        The channel rename runs in the background; rename failures are logged, not raised.
         Returns:
             None, if everything works fine.
         """
@@ -754,6 +769,32 @@ class TicketManager:
             criteria={"id": ticket.db_id},
         )
         self.ticket_caches[ticket.db_id] = ticket
+        # Channel renames are limited to 2 per 10 minutes per channel and discord.py
+        # waits out the limit silently, so awaiting the rename could block for minutes.
+        self._schedule_channel_rename(ticket=ticket)
+
+    def _cancel_pending_rename(self, channel_id: int) -> None:
+        task = self._rename_tasks.pop(channel_id, None)
+        if task and not task.done():
+            task.cancel()
+
+    def _schedule_channel_rename(self, ticket: Ticket) -> None:
+        # Only the latest status matters, so drop a rename still waiting on the limit
+        self._cancel_pending_rename(channel_id=ticket.channel_id)
+        task = asyncio.create_task(
+            self._rename_channel_in_background(ticket=ticket),
+            name=f"rename-ticket-{ticket.db_id}",
+        )
+        self._rename_tasks[ticket.channel_id] = task
+
+        def _forget(done: asyncio.Task, channel_id: int = ticket.channel_id) -> None:
+            if self._rename_tasks.get(channel_id) is done:
+                del self._rename_tasks[channel_id]
+
+        task.add_done_callback(_forget)
+
+    async def _rename_channel_in_background(self, ticket: Ticket) -> None:
+        started = asyncio.get_running_loop().time()
         try:
             await self.set_ticket_channel_name(ticket=ticket)
         except TicketNotFound as e:
@@ -761,8 +802,17 @@ class TicketManager:
                 f"{e}. The channel with the ticket's channel_id was not found in the guild."
             )
             # We delete the record in the cache since the ticket should likely have been deleted
-            self.ticket_caches.pop(ticket.db_id)
-            raise e
+            self.ticket_caches.pop(ticket.db_id, None)
+            return
+        except Exception:
+            self.logger.exception(f"Failed to rename channel of ticket {ticket.db_id}.")
+            return
+        elapsed = asyncio.get_running_loop().time() - started
+        if elapsed > SLOW_RENAME_LOG_SECONDS:
+            self.logger.warning(
+                f"Renaming channel of ticket {ticket.db_id} took {elapsed:.0f}s "
+                "(Discord limits channel renames to 2 per 10 minutes)."
+            )
 
     async def set_ticket_channel_name(
         self,

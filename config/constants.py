@@ -56,6 +56,12 @@ pre = get_required_env("CMD_PREFIX")
 
 LOG_LEVEL = os.getenv("LOG_LEVEL")
 
+# DiscordChatExporter has no timeout of its own.
+EXPORT_TIMEOUT_SECONDS = 180
+# Renames slower than this were likely held by Discord's limit of
+# 2 channel renames per channel per 10 minutes, so they get logged.
+SLOW_RENAME_LOG_SECONDS = 5
+
 eng_to_chinese = {
     "Monday": "一",
     "Tuesday": "二",
