@@ -30,6 +30,14 @@ def setup_logger(log_level: int = logging.INFO):
         logger.addHandler(console_handler)
         logger.addHandler(file_handler)
 
+    # bot.start() (unlike bot.run()) doesn't set up discord.py's logging, so its
+    # warnings, such as "We are being rate limited", were never formatted or saved.
+    discord_logger = logging.getLogger("discord")
+    discord_logger.setLevel(logging.INFO)
+    if not discord_logger.hasHandlers():
+        discord_logger.addHandler(console_handler)
+        discord_logger.addHandler(file_handler)
+
     db_logger = logging.getLogger("sqlalchemy.engine")
     db_logger.setLevel(logging.WARNING)
     db_file_handler = logging.handlers.TimedRotatingFileHandler(
