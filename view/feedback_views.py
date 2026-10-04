@@ -77,7 +77,7 @@ class FeedbackModal(Modal):
 
 
 def feedbackEmbed(
-    channel: TextChannel,
+    channel_name: str,
     client: Client,
 ) -> Embed:
     embed = embed_utils.create_themed_embed(
@@ -85,7 +85,7 @@ def feedbackEmbed(
         description="調查顧客之意見使龍龍代購更好",
         client=client,
     )
-    embed.add_field(name="剛剛的服務頻道", value=channel.name)
+    embed.add_field(name="剛剛的服務頻道", value=channel_name)
     embed_utils.add_std_footer(embed=embed, client=client)
     return embed
 

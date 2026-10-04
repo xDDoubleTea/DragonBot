@@ -603,6 +603,9 @@ class TicketManager:
         if not ticket:
             raise TicketNotFound
         await self.set_ticket_status(ticket=ticket, new_status=TicketStatus.CLOSED)
+        # The rename to CLOSED runs in the background and may still be waiting on
+        # Discord's rename limit, so channel.name can show an older status.
+        channel_name = self.get_ticket_channel_name(ticket)
 
         async def _sync_update_and_select():
             self.ticket_caches[ticket.db_id].status = TicketStatus.CLOSED
@@ -636,9 +639,9 @@ class TicketManager:
         customer_name = customer_name.rstrip(", ")
         try:
             transcript_bytes: bytes
-            transcript_bytes, filename = await self.archive_ticket(
-                channel_id=channel.id
-            )
+            transcript_bytes, _ = await self.archive_ticket(channel_id=channel.id)
+            # Same pattern as DiscordChatExporter's default file name
+            filename = f"{channel.guild.name} - {channel_name} [{channel.id}].html"
 
             archive_channel = await self._try_get_channel_by_bot(
                 channel_id=archive_channel_id
@@ -657,14 +660,14 @@ class TicketManager:
             closed_time_str = format_dt(datetime.now(timezone.utc), style="F")
 
             archive_embed = discord.Embed(
-                title=f"頻道 「{channel.name}」紀錄",
+                title=f"頻道 「{channel_name}」紀錄",
                 description=f"顧客：{customers_mention}\n{customer_name}\n此頻道開啟於{created_time_str}\n顧客數量{cus_num}\n關閉於{closed_time_str}",
                 color=THEME_COLOR,
             )
 
             new = await archive_channel.send(embed=archive_embed, file=transcript_file)
 
-            feedback_embed = feedbackEmbed(channel=channel, client=client)
+            feedback_embed = feedbackEmbed(channel_name=channel_name, client=client)
             assert feedback_embed.description
             feedback_embed.description += "\n說明：點選星數來代表今天服務的滿意度"
             for customer in customers:
@@ -814,6 +817,11 @@ class TicketManager:
                 "(Discord limits channel renames to 2 per 10 minutes)."
             )
 
+    @staticmethod
+    def get_ticket_channel_name(ticket: Ticket) -> str:
+        status_name = ticket.status.string_repr
+        return f"{ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}"
+
     async def set_ticket_channel_name(
         self,
         ticket: Ticket,
@@ -841,12 +849,9 @@ class TicketManager:
                 f"Ticket channel with ID {ticket.channel_id} not found in the guild with ID {ticket.guild_id}."
             )
         assert isinstance(ticket_channel, TextChannel)
-        status_name = ticket.status.string_repr
         try:
             # Just to be really safe.
-            await ticket_channel.edit(
-                name=f"{ticket.ticket_type.value}-{ticket.db_id:04d}-{status_name if status_name else '未知'}"
-            )
+            await ticket_channel.edit(name=self.get_ticket_channel_name(ticket))
         except (discord.errors.HTTPException, discord.errors.NotFound):
             raise TicketNotFound(
                 f"Ticket channel with ID {ticket.channel_id} not found in the guild with ID {ticket.guild_id}."
